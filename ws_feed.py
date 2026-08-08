@@ -48,9 +48,4 @@ def run_in_thread():
         loop.run_until_complete(_binance_feed())
     t = threading.Thread(target=_run, daemon=True)
     t.start()
-    import time
-    for _ in range(30):
-        with _price_lock:
-            if _price_cache: break
-        time.sleep(0.5)
-    return len(_price_cache)
+    return 0  # non-blocking, feed starts in background

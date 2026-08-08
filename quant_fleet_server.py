@@ -8,10 +8,11 @@ import sqlite3
 import importlib.util
 import urllib.request
 import threading
+import asyncio as _asyncio
+import websockets
 from datetime import datetime
 from init_db import init_db, DB_PATH, INITIAL_CAPITAL
 from ws_feed import run_in_thread, get_cached_prices
-from ws_server import run_server
 
 def now_ts(fmt="%H:%M:%S"):
     return datetime.now().strftime(fmt)
@@ -617,7 +618,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 def main():
     port=8899
     ws_count = run_in_thread()
-    run_server(fetch_all_data, 8898)
+    # Start WebSocket push server in background thread
+    import asyncio as _asyncio
+    _ws_clients = set()
+    async def _ws_handler(ws):
+        _ws_clients.add(ws)
+        try: await ws.wait_closed()
+        finally: _ws_clients.discard(ws)
+    async def _ws_broadcast():
+        while True:
+            if _ws_clients:
+                data = fetch_all_data()
+                if data:
+                    msg = json.dumps(data)
+                    dead = set()
+                    for ws in _ws_clients:
+                        try: await ws.send(msg)
+                        except: dead.add(ws)
+                    _ws_clients.difference_update(dead)
+            await _asyncio.sleep(1.0)
+    async def _ws_main():
+        async with websockets.serve(_ws_handler, "0.0.0.0", 8898):
+            await _ws_broadcast()
+    _ws_loop = _asyncio.new_event_loop()
+    def _ws_thread():
+        _asyncio.set_event_loop(_ws_loop)
+        _ws_loop.run_until_complete(_ws_main())
+    _ws_t = threading.Thread(target=_ws_thread, daemon=True)
+    _ws_t.start()
+    print("[WS Server] Push on ws://localhost:8898")
     print(f"WebSocket feed: {ws_count} symbols streaming")
     print(f"Quant Fleet on http://localhost:{port}")
     print(f"Initial capital: ${INITIAL_CAPITAL:,.0f}")
