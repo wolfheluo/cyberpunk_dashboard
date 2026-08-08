@@ -9,6 +9,7 @@
 tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code","Share Tech Mono","IBM Plex Mono","monospace"]},colors:{cyber:{bg:'#08090C',panel:'#0F1117',border:'#1E222D',cyan:'#00E5FF',green:'#00FF66',yellow:'#FFCC00',red:'#FF2A6D',muted:'#5A6275'}}}}}
 </script>
 <link rel="stylesheet" href="/dashboard/css/style.css">
+
 </head>
 <body class="flex flex-col h-screen">
 
@@ -204,64 +205,7 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
   <span class="text-[#00E5FF] text-sm"><span class="text-[#5A6275]">&gt;</span> <span id="cliPrompt" data-i18n="cli_prompt">fetching Binance: ...</span> <span class="animate-pulse">|</span></span>
   <span id="tradingPill" class="pill-off" data-i18n="disconnected">DISCONNECTED</span>
 </footer>
-<script>
-// ============================================================
-// I18n
-// ============================================================
-var I18n=(function(){var l='en',d={},r=false,q=[];
-function L(ln){return fetch('/dashboard/i18n/'+ln+'.json').then(function(r){return r.json();}).then(function(dd){d[ln]=dd;});}
-function T(k,p){var dd=d[l]||d['en']||{},s=dd[k]||(d['en']&&d['en'][k])||k;if(p){for(var kk in p)s=s.split('{'+kk+'}').join(p[kk]);}return s;}
-function B(){var es=document.querySelectorAll('[data-i18n]');for(var i=0;i<es.length;i++){var e=es[i],k=e.getAttribute('data-i18n');if(k)e.textContent=T(k);}}
-function I(){return Promise.all([L('en'),L('zh')]).then(function(){r=true;B();q.forEach(function(f){f();});q=[];});}
-return{init:I,t:T,setLang:function(ln){l=ln;document.getElementById('btnEN').className='lang-btn'+(ln==='en'?' active':'');document.getElementById('btnZH').className='lang-btn'+(ln==='zh'?' active':'');B();if(typeof R==='function')R();},ready:function(f){if(r)f();else q.push(f);}};})();
+<script src="/dashboard/js/app.js"></script>
 
-// ============================================================
-// SIDEBAR & PAGES
-// ============================================================
-var currentPage='dashboard';
-function toggleSidebar(){document.getElementById('sidebar').classList.toggle('collapsed');}
-function switchPage(page){
-  currentPage=page;
-  document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-page')===page);});
-  document.querySelectorAll('.page').forEach(function(el){el.classList.toggle('active',el.id==='page-'+page);});
-  if(page==='strategies')loadStrategyList();
-  if(page==='backtest')runBacktest();if(page==='account')loadAccount();if(page==='watchlist')loadSymbols();
-}
-
-// ============================================================
-// DATA
-// ============================================================
-var DATA={connected:false,latency_ms:null,tickers:[],strategy_matrix:{strategies:[],timeframes:[],cells:[]},kpi:{},factors:[],exec_log:[],active_strategy:'',positions:[],trades:[]};
-var strategiesList=[],activeStratFile='',editingFile='';
-
-// ============================================================
-// STRATEGY LOADER
-// ============================================================
-function loadStrategies(){
-  fetch('/api/strategies').then(function(r){return r.json();}).then(function(d){
-    strategiesList=d.strategies;activeStratFile=d.active;
-    var as=document.getElementById('acctStrategySelect');if(as){as.innerHTML='';for(var j=0;j<strategiesList.length;j++){var ss=strategiesList[j];as.innerHTML+='<option value="'+ss.filename+'"'+(ss.filename===d.active?' selected':'')+'>'+ss.name+'</option>';}}
-  });
-}
-function activateStrategy(fname){
-  if(!fname||fname===activeStratFile)return;
-  fetch('/api/strategy/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:fname})})
-    .then(function(r){return r.json();}).then(function(d){activeStratFile=d.active;document.getElementById('activeStratLabel').textContent=d.name;document.getElementById('strategySelect').value=d.active;});
-}
-
-// ============================================================
-// STRATEGY EDITOR
-// ============================================================
-function loadStrategyList(){
-  var el=document.getElementById('strategyList');el.innerHTML='';
-  strategiesList.forEach(function(s){
-    var isActive=s.filename===activeStratFile;
-    el.innerHTML+='<div class="panel p-2 cursor-pointer hover:border-[#00E5FF40]" onclick="openStrategy(\''+s.filename+'\')" style="border-color:'+(isActive?'#00E5FF':'')+'">'+
-      '<div class="flex justify-between items-center"><span class="text-[13px] '+(isActive?'text-[#00FF66]':'text-[#00E5FF]')+'">'+s.name+'</span>'+(isActive?'<span class="badge-green">ACTIVE</span>':'')+'</div>'+
-      '<div class="text-[11px] text-[#5A6275] mt-0.5">'+s.description+'</div></div>';
-  });
-  if(!strategiesList.length)el.innerHTML='<div class="text-[#5A6275]">No strategies found</div>';
-}
-function openStrategy(fname){
-  editingFile=fname;
-  fetch('<script src="/dashboard/js/app.js"></script>
+</body>
+</html>
