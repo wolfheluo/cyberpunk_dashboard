@@ -254,7 +254,7 @@ function renderPipeline(pulse){
   var c=document.getElementById('pipelineCanvas');if(!c)return;
   var p=c.parentElement;c.width=p.clientWidth-16;c.height=p.clientHeight-4;
   var ctx=c.getContext('2d'),w=c.width,h=c.height;
-  var cx=15,cy=h/2+10,step=(w-30)/7;
+  var cx=15,cy=h*0.6,step=(w-30)/7;
   var t=pulse||0;
   var nodes=[
     {x:cx,y:cy,label:'SIGNAL',color:'#00E5FF',active:true},
