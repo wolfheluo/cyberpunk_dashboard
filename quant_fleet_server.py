@@ -10,6 +10,7 @@ import urllib.request
 import threading
 from datetime import datetime
 from init_db import init_db, DB_PATH, INITIAL_CAPITAL
+from ws_feed import run_in_thread, get_cached_prices
 
 def now_ts(fmt="%H:%M:%S"):
     return datetime.now().strftime(fmt)
@@ -160,15 +161,20 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None):
 # MAIN DATA FETCH
 # ============================================================
 def fetch_all_data():
-    tickers_raw = fetch_json(f"{BINANCE_BASE}/api/v3/ticker/24hr")
-    if not tickers_raw: return None
-
-    price_map = {}
-    for t in tickers_raw:
-        price_map[t["symbol"]] = {
-            "price":float(t["lastPrice"]),"change_pct":float(t["priceChangePercent"]),
-            "volume":float(t["quoteVolume"]),"high":float(t["highPrice"]),"low":float(t["lowPrice"])
-        }
+    # Use WebSocket-cached prices instead of REST API
+    cached = get_cached_prices()
+    if not cached:
+        # Fallback to REST if WS feed not ready
+        tickers_raw = fetch_json(f"{BINANCE_BASE}/api/v3/ticker/24hr")
+        if not tickers_raw: return None
+        price_map = {}
+        for t in tickers_raw:
+            price_map[t["symbol"]] = {
+                "price":float(t["lastPrice"]),"change_pct":float(t["priceChangePercent"]),
+                "volume":float(t["quoteVolume"]),"high":float(t["highPrice"]),"low":float(t["lowPrice"])
+            }
+    else:
+        price_map = cached
 
     strat = get_active_strategy()
     strategy_name = strat["name"] if strat else "none"
@@ -609,6 +615,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 def main():
     port=8899
+    ws_count = run_in_thread()
+    print(f"WebSocket feed: {ws_count} symbols streaming")
     print(f"Quant Fleet on http://localhost:{port}")
     print(f"Initial capital: ${INITIAL_CAPITAL:,.0f}")
     load_strategies()
