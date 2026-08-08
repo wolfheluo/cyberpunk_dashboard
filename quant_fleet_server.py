@@ -496,6 +496,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             pf = db_conn.execute("SELECT cash,initial_capital FROM portfolio WHERE id=1").fetchone()
             pos_val = sum(r[2]*(r[0] or r[2]) for r in db_conn.execute("SELECT current_price,entry_price,quantity FROM positions").fetchall())
             self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,"total_equity":pf[0]+pos_val})
+        elif self.path.startswith("/i18n/"):
+            fname = self.path.replace("/i18n/", "")
+            path = os.path.join("/root/i18n", fname)
+            if os.path.isfile(path):
+                with open(path, "rb") as f: content = f.read()
+                self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
+            else: self.send_error(404)
         elif self.path in ("/","/index.html"):
             try:
                 with open(HTML_PATH,"rb") as f: content=f.read()
