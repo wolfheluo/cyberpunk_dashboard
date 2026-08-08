@@ -321,9 +321,9 @@ function animatePipeline(){
     else if(hasReject){pipeHasSignal='reject';pipeSignalAge=0;}
     else if(hasFail){pipeHasSignal='fail';pipeSignalAge=0;}
     else {pipeSignalAge++;}
-    // Keep the animation alive long enough for the orb to reach DONE after
-    // the signal clears (full exec path ≈ 4.4s at 60fps → 300 frames).
-    if(pipeSignalAge>300)pipeHasSignal='wait';
+    // No signal → orb flies back to WAIT almost immediately (15 frames =
+    // 0.25s debounce so a single poll blip doesn't flicker the path).
+    if(pipeSignalAge>15)pipeHasSignal='wait';
   }
   renderPipeline(pipePulse);
   pipeAnimId=requestAnimationFrame(animatePipeline);
