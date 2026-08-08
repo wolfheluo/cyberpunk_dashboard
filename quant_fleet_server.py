@@ -510,7 +510,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200,r if r else {"error":"Insufficient funds or no position"})
         elif self.path=="/api/reset":
             with db_lock:
-                db_conn.executescript("DELETE FROM trades; DELETE FROM positions; DELETE FROM signals; UPDATE portfolio SET cash=?,updated_at=datetime('now', '+8 hours') WHERE id=1"%(INITIAL_CAPITAL,))
+                db_conn.execute("DELETE FROM trades");
+                db_conn.execute("DELETE FROM positions");
+                db_conn.execute("DELETE FROM signals");
+                db_conn.execute("UPDATE portfolio SET cash=?,updated_at=datetime('now', '+8 hours') WHERE id=1", (INITIAL_CAPITAL,))
                 db_conn.commit()
             with log_lock: exec_log.clear()
             self._json(200,{"status":"reset","capital":INITIAL_CAPITAL})
