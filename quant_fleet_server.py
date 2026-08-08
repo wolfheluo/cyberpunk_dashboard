@@ -9,7 +9,12 @@ import sqlite3
 import importlib.util
 import urllib.request
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+TZ = timezone(timedelta(hours=8))  # UTC+8
+
+def now_ts(fmt="%H:%M:%S"):
+    return datetime.now(TZ).strftime(fmt)
 
 # ============================================================
 # CONFIG
@@ -272,7 +277,7 @@ def fetch_all_data():
                 confidence = out.get("confidence",50)
                 factors_dict = out.get("factors",{})
             except Exception as e:
-                add_log(datetime.now().strftime("%H:%M:%S"),"error",f'Strategy error {sym}: {e}')
+                add_log(now_ts(),"error",f'Strategy error {sym}: {e}')
 
         # Record signal
         with db_lock:
@@ -301,7 +306,7 @@ def fetch_all_data():
         })
 
     # ---- Build logs ----
-    ts = datetime.now().strftime("%H:%M:%S")
+    ts = now_ts()
     buys=sells=0
     trade_logs=[]
 
