@@ -72,9 +72,7 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
 <header class="flex items-center justify-between px-4 py-2 border-b border-[#1E222D] bg-[#0A0C12] shrink-0">
   <div class="flex items-center gap-4">
     <span class="text-[#00E5FF] font-bold text-base tracking-wider glow-cyan">QUANT FLEET v2.4</span>
-    <select class="strat-select" id="strategySelect" onchange="activateStrategy(this.value)" title="Select strategy">
-      <option value="">Loading...</option>
-    </select>
+    <span class="text-[#5A6275] text-sm">// WATCHLIST <span class="text-[#00E5FF]">[<span id="tickerCount">0</span>]</span></span>
   </div>
   <div class="flex items-center gap-4 text-sm">
     <button class="lang-btn active" onclick="I18n.setLang('en')" id="btnEN">EN</button>
@@ -116,7 +114,7 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
         <section class="flex-1 flex flex-col overflow-hidden">
           <div class="flex border-b border-[#1E222D]" style="height:42%">
             <div class="w-[55%] border-r border-[#1E222D] p-3 overflow-y-auto">
-              <div class="text-sm text-[#5A6275] mb-2"><span data-i18n="signal_header">TICKER  PRICE  SIGNAL  CONF</span> <span class="text-[#00E5FF]">[<span id="activeStratLabel">--</span>]</span></div>
+              <div class="text-sm text-[#5A6275] mb-2"><span data-i18n="signal_header">TICKER  PRICE  SIGNAL  CONF</span></div>
               <div class="space-y-0.5 text-sm" id="signalTable"><div class="text-[#5A6275] text-[13px]">--</div></div>
             </div>
             <div class="w-[45%] flex flex-col items-center justify-center p-3">
@@ -189,6 +187,12 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
       <div class="flex flex-1 overflow-hidden">
         <div class="w-[55%] overflow-y-auto p-3 border-r border-[#1E222D]">
           <div class="text-sm text-[#00E5FF] mb-3">PORTFOLIO SUMMARY</div>
+          <div class="flex items-center gap-3 mb-3">
+            <span class="text-[12px] text-[#5A6275]">Active Strategy:</span>
+            <select class="strat-select" id="acctStrategySelect" onchange="activateStrategy(this.value)" style="max-width:250px">
+              <option value="">Loading...</option>
+            </select>
+          </div>
           <div id="accountSummary" class="grid grid-cols-4 gap-3 mb-4"></div>
           <div class="text-sm text-[#00E5FF] mb-2">OPEN POSITIONS</div>
           <div id="accountPositions" class="mb-4"><div class="text-[#5A6275] text-[12px]">Loading...</div></div>
@@ -270,6 +274,7 @@ function loadStrategies(){
     var sel=document.getElementById('strategySelect');sel.innerHTML='';
     for(var i=0;i<strategiesList.length;i++){var s=strategiesList[i];sel.innerHTML+='<option value="'+s.filename+'"'+(s.filename===d.active?' selected':'')+'>'+s.name+'</option>';}
     document.getElementById('activeStratLabel').textContent=d.strategies.find(function(s){return s.filename===d.active;})?.name||'--';
+    var as=document.getElementById('acctStrategySelect');if(as){as.innerHTML='';for(var j=0;j<strategiesList.length;j++){var ss=strategiesList[j];as.innerHTML+='<option value="'+ss.filename+'"'+(ss.filename===d.active?' selected':'')+'>'+ss.name+'</option>';}}
   });
 }
 function activateStrategy(fname){
