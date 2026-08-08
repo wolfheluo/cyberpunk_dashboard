@@ -371,6 +371,19 @@ function connectBinanceWS(){
   binanceWS.onerror=function(){binanceWS.close();};
 }
 var _priceBuffer={};
+function updateRailPrices(){
+  // Surgical DOM update of the ticker rail price spans (no full redraw).
+  // Called from updatePrices (WebSocket ticks) AND fetchData (1s poll fallback),
+  // so prices keep moving even if the WS feed drops.
+  if(!DATA.tickers.length)return;
+  var cards=document.querySelectorAll('#tickerRail .panel');
+  for(var i=0;i<cards.length&&i<DATA.tickers.length;i++){
+    var tk=DATA.tickers[i],spans=cards[i].querySelectorAll('span');
+    if(spans.length>=2){
+      spans[spans.length-2].textContent='$'+Number(tk.price).toFixed(tk.price<1?4:2);
+    }
+  }
+}
 function updatePrices(){
   if(!DATA.tickers)return;
   for(var i=0;i<DATA.tickers.length;i++){
@@ -383,15 +396,7 @@ function updatePrices(){
       if(_priceBuffer[sym].length>100)_priceBuffer[sym].shift();
     }
   }
-  // Update price DOM directly without redrawing whole rail
-  if(!DATA.tickers.length)return;
-  var cards=document.querySelectorAll('#tickerRail .panel');
-  for(var i=0;i<cards.length;i++){
-    var tk=DATA.tickers[i],spans=cards[i].querySelectorAll('span');
-    if(spans.length>=2){
-      spans[spans.length-2].textContent='$'+Number(tk.price).toFixed(tk.price<1?4:2);
-    }
-  }
+  updateRailPrices();
   // Re-evaluate strategies on every price update
   if(activeJSStrategy){
     for(var i=0;i<DATA.tickers.length;i++){
@@ -458,6 +463,7 @@ function fetchData(){
       var tc=document.getElementById('tickerCount');if(tc)tc.textContent=DATA.tickers.length;
       var cp=document.getElementById('cliPrompt');if(cp)cp.textContent=I18n.t('cli_scan')+' '+DATA.tickers.map(function(t){return t.id;}).join(' ');
       document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
+      updateRailPrices();
       if(DATA.tickers.length&&currentPage==='dashboard'){
         // First data arrival: full render so the ticker rail gets built (R(false)
         // skips renderTickerRail). Later updates stay surgical to avoid flicker.
