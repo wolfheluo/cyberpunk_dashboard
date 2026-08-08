@@ -99,6 +99,9 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
     <div class="nav-item" data-page="backtest" onclick="switchPage('backtest')">
       <span class="icon">📈</span><span class="nav-label">BACKTEST</span>
     </div>
+    <div class="nav-item" data-page="account" onclick="switchPage('account')">
+      <span class="icon">👤</span><span class="nav-label">MY ACCOUNT</span>
+    </div>
   </nav>
 
   <!-- MAIN CONTENT -->
@@ -181,6 +184,24 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
       </div>
     </div>
 
+    <!-- PAGE: Account -->
+    <div id="page-account" class="page">
+      <div class="flex flex-1 overflow-hidden">
+        <div class="w-[55%] overflow-y-auto p-3 border-r border-[#1E222D]">
+          <div class="text-sm text-[#00E5FF] mb-3">PORTFOLIO SUMMARY</div>
+          <div id="accountSummary" class="grid grid-cols-4 gap-3 mb-4"></div>
+          <div class="text-sm text-[#00E5FF] mb-2">OPEN POSITIONS</div>
+          <div id="accountPositions" class="mb-4"><div class="text-[#5A6275] text-[12px]">Loading...</div></div>
+          <div class="text-sm text-[#00E5FF] mb-2">TRADE HISTORY</div>
+          <div id="accountTrades" class="text-[11px]"><div class="text-[#5A6275]">Loading...</div></div>
+        </div>
+        <div class="flex-1 flex flex-col p-3 overflow-hidden">
+          <div class="text-sm text-[#00E5FF] mb-2">EQUITY CURVE</div>
+          <div class="flex-1"><canvas id="accountChart" class="w-full h-full"></canvas></div>
+        </div>
+      </div>
+    </div>
+
     <!-- PAGE: Backtest -->
     <div id="page-backtest" class="page">
       <div class="flex flex-1 overflow-hidden">
@@ -231,7 +252,7 @@ function switchPage(page){
   document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-page')===page);});
   document.querySelectorAll('.page').forEach(function(el){el.classList.toggle('active',el.id==='page-'+page);});
   if(page==='strategies')loadStrategyList();
-  if(page==='backtest')runBacktest();
+  if(page==='backtest')runBacktest();if(page==='account')loadAccount();
 }
 
 // ============================================================
@@ -475,6 +496,100 @@ function fetchData(){
       document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
       if(currentPage==='dashboard')R();setTimeout(fetchData,PI);
     }).catch(function(err){document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();setTimeout(fetchData,PI);});
+}
+
+// ============================================================
+// ACCOUNT PAGE
+// ============================================================
+function loadAccount(){
+  Promise.all([
+    fetch('/api/portfolio').then(function(r){return r.json();}),
+    fetch('/api/positions').then(function(r){return r.json();}),
+    fetch('/api/trades').then(function(r){return r.json();})
+  ]).then(function(results){
+    var pf=results[0],pos=results[1],trades=results[2];
+    var pnl=pf.total_equity-10000,pnlCl=pnl>=0?'text-[#00FF66]':'text-[#FF2A6D]',pnlSg=pnl>=0?'+':'';
+
+    // Summary cards
+    document.getElementById('accountSummary').innerHTML=
+      '<div class="panel p-3 text-center"><div class="text-[11px] text-[#5A6275]">CASH</div><div class="text-[#00E5FF] text-base">$'+pf.cash.toLocaleString()+'</div></div>'+
+      '<div class="panel p-3 text-center"><div class="text-[11px] text-[#5A6275]">POSITIONS</div><div class="text-[#FFCC00] text-base">$'+pf.position_value.toLocaleString()+'</div></div>'+
+      '<div class="panel p-3 text-center"><div class="text-[11px] text-[#5A6275]">TOTAL EQUITY</div><div class="'+pnlCl+' text-base">$'+pf.total_equity.toLocaleString()+'</div></div>'+
+      '<div class="panel p-3 text-center"><div class="text-[11px] text-[#5A6275]">P&L</div><div class="'+pnlCl+' text-base">'+pnlSg+'$'+Math.abs(pnl).toLocaleString()+'</div></div>';
+
+    // Positions
+    var posEl=document.getElementById('accountPositions');
+    if(!pos.positions||!pos.positions.length){posEl.innerHTML='<div class="text-[#5A6275] text-[12px]">No open positions</div>';}
+    else{
+      posEl.innerHTML='<table class="bt-table w-full"><thead><tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Current</th><th>P&L</th><th>Strategy</th></tr></thead><tbody>'+
+        pos.positions.map(function(p){var pnlCl2=p.unrealized_pnl>=0?'text-[#00FF66]':'text-[#FF2A6D]',pnlSg2=p.unrealized_pnl>=0?'+':'';return '<tr><td class="text-[#00E5FF]">'+p.symbol+'</td><td class="'+(p.side==='BUY'?'text-[#00FF66]':'text-[#FF2A6D]')+'">'+p.side+'</td><td>'+Number(p.quantity).toFixed(4)+'</td><td>$'+Number(p.entry_price).toFixed(2)+'</td><td>$'+(p.current_price?Number(p.current_price).toFixed(2):'--')+'</td><td class="'+pnlCl2+'">'+pnlSg2+'$'+Math.abs(p.unrealized_pnl||0).toFixed(2)+'</td><td class="text-[#5A6275]">'+(p.strategy||'')+'</td></tr>';}).join('')+
+        '</tbody></table>';
+    }
+
+    // Trades
+    var trEl=document.getElementById('accountTrades');
+    if(!trades.trades||!trades.trades.length){trEl.innerHTML='<div class="text-[#5A6275]">No trades yet</div>';}
+    else{
+      trEl.innerHTML='<table class="bt-table w-full"><thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Price</th><th>Qty</th><th>Notional</th><th>Strategy</th></tr></thead><tbody>'+
+        trades.trades.map(function(t){var sc=t.side==='BUY'?'text-[#00FF66]':'text-[#FF2A6D]';return '<tr><td class="text-[#5A6275]">'+(t.created_at||'').slice(11,19)+'</td><td class="text-[#00E5FF]">'+t.symbol+'</td><td class="'+sc+'">'+t.side+'</td><td>$'+Number(t.price).toFixed(Number(t.price)<1?4:2)+'</td><td>'+Number(t.quantity).toFixed(4)+'</td><td>$'+Number(t.notional).toFixed(0)+'</td><td class="text-[#5A6275]">'+(t.strategy||'')+'</td></tr>';}).join('')+
+        '</tbody></table>';
+    }
+
+    // Equity curve from trades
+    drawAccountChart(trades.trades||[],10000);
+  });
+}
+
+function drawAccountChart(trades,initialCapital){
+  var c=document.getElementById('accountChart'),p=c.parentElement;
+  c.width=p.clientWidth-8;c.height=p.clientHeight-8;
+  var ctx=c.getContext('2d'),w=c.width,h=c.height,pad=40;
+  ctx.clearRect(0,0,w,h);
+  if(!trades.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText('No trades yet',w/2,h/2);ctx.textAlign='start';return;}
+
+  // Build equity curve from trade history
+  var cash=initialCapital,positions={},equity=[],dates=[];
+  for(var i=trades.length-1;i>=0;i--){
+    var t=trades[i];
+    if(t.side==='BUY'){
+      cash-=t.notional;
+      if(positions[t.symbol]){positions[t.symbol]+=t.quantity;}
+      else{positions[t.symbol]=t.quantity;}
+    }else{
+      cash+=t.notional;
+      if(positions[t.symbol]){positions[t.symbol]-=t.quantity;if(positions[t.symbol]<=0)delete positions[t.symbol];}
+    }
+    equity.push(cash);
+    dates.push((t.created_at||'').slice(11,19));
+  }
+  equity.reverse();dates.reverse();
+
+  var eqMin=Math.min.apply(null,equity.concat([initialCapital])),eqMax=Math.max.apply(null,equity.concat([initialCapital])),eqRng=eqMax-eqMin||1;
+
+  // Axes
+  ctx.strokeStyle='#1E222D';ctx.lineWidth=0.5;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,h-pad);ctx.lineTo(w-10,h-pad);ctx.stroke();
+  ctx.fillStyle='#5A6275';ctx.font='9px monospace';ctx.textAlign='right';
+  for(var i=0;i<=4;i++){var y=h-pad-(h-2*pad)*i/4,val=eqMin+eqRng*i/4;ctx.fillText('$'+(val/1000).toFixed(1)+'k',pad-4,y+3);}
+
+  // Baseline
+  var baseY=h-pad-(h-2*pad)*(initialCapital-eqMin)/eqRng;
+  ctx.strokeStyle='#5A6275';ctx.setLineDash([3,5]);ctx.beginPath();ctx.moveTo(pad,baseY);ctx.lineTo(w-10,baseY);ctx.stroke();ctx.setLineDash([]);
+
+  // Equity line
+  ctx.strokeStyle='#00E5FF';ctx.lineWidth=1.5;ctx.beginPath();
+  for(var j=0;j<equity.length;j++){var x=pad+(w-pad-10)*j/(equity.length-1),yV=h-pad-(h-2*pad)*(equity[j]-eqMin)/eqRng;j===0?ctx.moveTo(x,yV):ctx.lineTo(x,yV);}
+  ctx.stroke();
+
+  // Fill
+  ctx.fillStyle='rgba(0,229,255,0.08)';ctx.lineTo(w-10,h-pad);ctx.lineTo(pad,h-pad);ctx.closePath();ctx.fill();
+
+  // Final value
+  ctx.fillStyle='#00E5FF';ctx.font='11px monospace';ctx.textAlign='start';
+  var finalVal=equity[equity.length-1],finalCl=finalVal>=initialCapital?'#00FF66':'#FF2A6D';
+  ctx.fillStyle=finalCl;
+  ctx.fillText('$'+finalVal.toLocaleString(),w-8,h-pad-8);
+  ctx.textAlign='start';
 }
 
 // ============================================================
