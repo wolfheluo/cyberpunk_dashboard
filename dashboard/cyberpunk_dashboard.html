@@ -75,9 +75,9 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
               </div>
             </div>
           </div>
-          <div class="border-b border-[#1E222D] p-2" style="height:10%">
-            <div class="text-[12px] text-[#5A6275] mb-1"><span data-i18n="strategy_matrix_title">STRATEGY x TIMEFRAME</span> <span class="text-[#00E5FF]">(15m - 1h - 4h - 1d)</span></div>
-            <div class="flex gap-1 h-[28px]" id="strategyMatrix"><div class="text-[#5A6275] text-[11px] flex items-center" data-i18n="waiting_matrix">Waiting...</div></div>
+          <div class="border-b border-[#1E222D] p-2" style="height:14%">
+            <div class="text-[12px] text-[#5A6275] mb-1">TRADE PIPELINE — signal → risk → order → fill → settle</div>
+            <canvas id="pipelineCanvas" class="w-full" height="52"></canvas>
           </div>
           <div class="border-b border-[#1E222D] p-2" style="height:14%">
             <div class="text-[12px] text-[#5A6275] mb-1"><span data-i18n="positions_title">POSITIONS</span> <span class="text-[#00FF66]">— Paper Trading</span></div>
