@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 quant_fleet.db
+quant_fleet.db-shm
+quant_fleet.db-wal
+backtest_data/

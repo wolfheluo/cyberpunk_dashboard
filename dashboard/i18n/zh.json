@@ -1,6 +1,8 @@
 {
-  "app_title": "QUANT FLEET v2.4",
+  "app_title": "QUANT FLEET v2.5",
   "watchlist": "// 自選清單",
+  "nav_watchlist": "自選清單",
+  "cli_scan": "掃描中:",
   "lat": "延遲",
   "mkt": "市場",
   "open": "開盤",

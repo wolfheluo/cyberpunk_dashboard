@@ -9,7 +9,7 @@ body{background:#08090C;color:#c0c8d8;font-family:"JetBrains Mono","Fira Code","
 .dot-green{display:inline-block;width:6px;height:6px;border-radius:50%;background:#00FF66;box-shadow:0 0 8px #00FF66;margin-right:6px;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .badge-cyan{background:#00E5FF15;color:#00E5FF;border:1px solid #00E5FF30;padding:1px 8px;border-radius:3px;font-size:15px}
-.badge-green{background:#00E5FF15;color:#00E5FF;border:1px solid #00E5FF30;padding:1px 8px;border-radius:3px;font-size:15px}
+.badge-green{background:#00FF6615;color:#00FF66;border:1px solid #00FF6630;padding:1px 8px;border-radius:3px;font-size:15px}
 .badge-yellow{background:#FFCC0015;color:#FFCC00;border:1px solid #FFCC0030;padding:1px 8px;border-radius:3px;font-size:15px}
 .badge-red{background:#FF2A6D15;color:#FF2A6D;border:1px solid #FF2A6D30;padding:1px 8px;border-radius:3px;font-size:15px}
 .pill-live{background:#00FF6620;color:#00FF66;border:1px solid #00FF6640;padding:4px 14px;border-radius:20px;font-size:15px;font-weight:600;animation:pulse 2s infinite}

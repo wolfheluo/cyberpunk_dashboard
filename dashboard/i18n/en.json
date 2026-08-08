@@ -1,6 +1,8 @@
 {
-  "app_title": "QUANT FLEET v2.4",
+  "app_title": "QUANT FLEET v2.5",
   "watchlist": "// WATCHLIST",
+  "nav_watchlist": "WATCHLIST",
+  "cli_scan": "scanning:",
   "lat": "LAT",
   "mkt": "MKT",
   "open": "OPEN",

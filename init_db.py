@@ -2,7 +2,7 @@
 """Database initialization + historical data download — shared across all modules."""
 
 import os, csv, io, zipfile, urllib.request, time, sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 _BASE = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else os.getcwd()
 DB_PATH = os.path.join(_BASE, "quant_fleet.db")
@@ -120,7 +120,7 @@ def download_historical(symbol):
                     with z.open(z.namelist()[0]) as f:
                         for row in csv.reader(io.TextIOWrapper(f)):
                             ts = int(row[0]) // 1_000_000
-                            date_str = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+                            date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
                             all_rows.append((symbol, date_str,
                                 float(row[1]), float(row[2]), float(row[3]),
                                 float(row[4]), float(row[5])))

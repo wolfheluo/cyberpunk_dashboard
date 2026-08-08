@@ -4,11 +4,18 @@
 import http.server
 import json
 import os
+import re
+import shutil
 import sqlite3
+import subprocess
 import urllib.request
 import threading
 from datetime import datetime
 from init_db import init_db, DB_PATH, INITIAL_CAPITAL
+
+def _esc(s):
+    """HTML-escape user-controlled strings before embedding in exec_log html."""
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 def now_ts(fmt="%H:%M:%S"):
     return datetime.now().strftime(fmt)
@@ -46,31 +53,84 @@ def add_log(ts, msg_type, html):
 # ============================================================
 # JS STRATEGY HELPERS
 # ============================================================
+HAS_NODE = shutil.which("node") is not None
+
+def _safe_strategy_name(fname):
+    """Validate a strategy filename: basename only, [A-Za-z0-9_-]+.js. Raises ValueError."""
+    base = os.path.basename(fname or "")
+    if not re.fullmatch(r"[A-Za-z0-9_\-]+\.js", base):
+        raise ValueError("Invalid strategy name")
+    return base
+
+def _strategy_meta(content):
+    """Extract NAME/DESCRIPTION from a JS strategy file (object-literal style)."""
+    name_m = re.search(r'NAME\s*[:=]\s*"([^"]+)"', content)
+    desc_m = re.search(r'DESCRIPTION\s*[:=]\s*"([^"]+)"', content)
+    return (name_m.group(1) if name_m else None), (desc_m.group(1) if desc_m else "")
+
 def list_js_strategies():
     """Return [{filename, name, description}] for all .js strategy files."""
     result = []
     if os.path.isdir(STRATEGIES_DIR):
         for fname in sorted(os.listdir(STRATEGIES_DIR)):
-            if not fname.endswith('.js') or fname.startswith('_'): continue
+            if not fname.endswith('.js') or fname.startswith('_'):
+                continue
             path = os.path.join(STRATEGIES_DIR, fname)
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 content = f.read()
-            # Extract NAME and DESCRIPTION from JS comment-style vars
-            import re
-            name_m = re.search(r'NAME\s*=\s*"([^"]+)"', content)
-            desc_m = re.search(r'DESCRIPTION\s*=\s*"([^"]+)"', content)
+            name, desc = _strategy_meta(content)
             result.append({
                 "filename": fname,
-                "name": name_m.group(1) if name_m else fname.replace('.js','').replace('_',' ').title(),
-                "description": desc_m.group(1) if desc_m else ""
+                "name": name or fname.replace('.js', '').replace('_', ' ').title(),
+                "description": desc or ""
             })
     return result
 
-def get_js_strategy_code(fname):
-    path = os.path.join(STRATEGIES_DIR, fname)
-    if os.path.isfile(path):
-        with open(path) as f: return f.read()
-    return None
+def run_js_strategy(strategy_file, ticker_infos):
+    """Evaluate a JS strategy for all tickers via a node subprocess.
+
+    ticker_infos: [{"id": "BTC", "ticker": {...}, "indicators": {...}}, ...]
+    Returns {symbol: {"signal","confidence","factors"}} — empty dict on any failure.
+    """
+    if not HAS_NODE or not ticker_infos:
+        return {}
+    helper = os.path.join(STRATEGIES_DIR, "_run_strategy.js")
+    payload = json.dumps({"strategy": strategy_file, "tickers": ticker_infos})
+    try:
+        proc = subprocess.run(["node", helper], input=payload, capture_output=True,
+                              text=True, timeout=15)
+        out = proc.stdout.strip()
+        if proc.returncode != 0 or not out:
+            return {}
+        data = json.loads(out)
+        if "error" in data:
+            return {}
+        return data
+    except Exception:
+        return {}
+
+def run_js_backtests(strategy_file, symbols_klines):
+    """Run a JS strategy against historical klines for many symbols in one node call.
+
+    symbols_klines: {symbol: [{"date","open","high","low","close","volume"}, ...]}
+    Returns {symbol: backtest_result} — empty dict on failure.
+    """
+    if not HAS_NODE or not symbols_klines:
+        return {}
+    helper = os.path.join(STRATEGIES_DIR, "_run_backtest.js")
+    payload = json.dumps({"strategy": strategy_file, "symbols": symbols_klines})
+    try:
+        proc = subprocess.run(["node", helper], input=payload, capture_output=True,
+                              text=True, timeout=120)
+        out = proc.stdout.strip()
+        if proc.returncode != 0 or not out:
+            return {}
+        data = json.loads(out)
+        if isinstance(data, dict) and "error" in data:
+            return {}
+        return data
+    except Exception:
+        return {}
 
 # ============================================================
 # INDICATORS
@@ -156,6 +216,61 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None):
         db_conn.commit()
         return {"trade_id": trade_id, "quantity": round(quantity, 8), "notional": round(notional, 2)}
 
+def portfolio_stats(initial_capital=INITIAL_CAPITAL):
+    """FIFO-based realized PnL + equity curve from trade history (real metrics, no fabricated values).
+
+    Returns (win_rate, sharpe, max_drawdown) — each None when there is not enough data.
+    """
+    rows = db_conn.execute("SELECT symbol,side,price,quantity FROM trades ORDER BY id ASC").fetchall()
+    if not rows:
+        return None, None, None
+    basis = {}  # symbol -> list of [remaining_qty, price]
+    cash = initial_capital
+    equity = []
+    wins = losses = 0
+    for sym, side, price, qty in rows:
+        if side == "BUY":
+            cash -= qty * price
+            basis.setdefault(sym, []).append([qty, price])
+        else:
+            cash += qty * price
+            remaining = qty
+            realized = 0.0
+            for lot in basis.get(sym, []):
+                if remaining <= 0:
+                    break
+                take = min(lot[0], remaining)
+                realized += take * (price - lot[1])
+                lot[0] -= take
+                remaining -= take
+            basis[sym] = [l for l in basis[sym] if l[0] > 0]
+            if realized > 0:
+                wins += 1
+            elif realized < 0:
+                losses += 1
+        mtm = sum(lot[0] * price for lots in basis.values() for lot in lots)
+        equity.append(cash + mtm)
+
+    win_rate = (wins / (wins + losses) * 100) if (wins + losses) else None
+
+    sharpe = max_dd = None
+    if len(equity) >= 3:
+        returns = [(equity[i] - equity[i-1]) / equity[i-1] for i in range(1, len(equity)) if equity[i-1] != 0]
+        if len(returns) >= 2:
+            mean = sum(returns) / len(returns)
+            var = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
+            std = var ** 0.5
+            if std > 0:
+                sharpe = round(mean / std * (len(returns) ** 0.5), 2)
+        peak = equity[0]
+        for v in equity:
+            if v > peak:
+                peak = v
+            dd = (peak - v) / peak * 100 if peak else 0
+            max_dd = dd if max_dd is None or dd > max_dd else max_dd
+        max_dd = round(max_dd, 1) if max_dd is not None else None
+    return win_rate, sharpe, max_dd
+
 # ============================================================
 # MAIN DATA FETCH
 # ============================================================
@@ -181,51 +296,80 @@ def fetch_all_data():
         for r in db_conn.execute("SELECT symbol,quantity,entry_price FROM positions"):
             positions_map[r[0]] = {"quantity":r[1],"entry_price":r[2]}
 
+    # Re-mark open positions with current prices (positions would otherwise be stale)
+    with db_lock:
+        for r in db_conn.execute("SELECT symbol,quantity,entry_price FROM positions").fetchall():
+            pm = price_map.get(r[0] + "USDT")
+            if pm:
+                db_conn.execute(
+                    "UPDATE positions SET current_price=?, unrealized_pnl=?, updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                    (pm["price"], (pm["price"] - r[2]) * r[1], r[0]))
+        db_conn.commit()
+
     # Record prices for historical tracking (every 5 min to avoid bloat)
     with db_lock:
         last_rec = db_conn.execute("SELECT MAX(recorded_at) FROM prices").fetchone()[0]
         should_record = not last_rec or (datetime.now() - datetime.fromisoformat(last_rec)).total_seconds() > 300
+
+    # Pass 1: build ticker + indicators for every watchlist symbol, then evaluate
+    # the active JS strategy ONCE via node subprocess (no more hardcoded HOLD).
+    ticker_infos = []
     for symbol in SYMBOLS:
-        sym_short = symbol.replace("USDT","")
+        sym = symbol.replace("USDT", "")
         pm = price_map.get(symbol)
+        if not pm:
+            continue
+        price = pm["price"]; change_pct = pm["change_pct"]; volume = pm["volume"]
+        name = SYMBOL_NAMES.get(sym, sym)
+
+        klines_1h = fetch_json(f"{BINANCE_BASE}/api/v3/klines?symbol={symbol}&interval=1h&limit=30")
+        closes_1h = [float(k[4]) for k in klines_1h] if klines_1h else []
         if should_record and pm:
             try:
                 with db_lock:
-                    db_conn.execute("INSERT INTO prices (symbol, price) VALUES (?, ?)", (sym_short, pm["price"]))
+                    db_conn.execute("INSERT INTO prices (symbol, price) VALUES (?, ?)", (sym, price))
                     db_conn.commit()
-            except: pass
-        sym = symbol.replace("USDT","")
-        sym = symbol.replace("USDT","")
-        name = SYMBOL_NAMES.get(sym, sym)
-        pm = price_map.get(symbol)
-        if not pm: continue
+            except Exception:
+                pass
 
+        vol_surge = len(closes_1h) >= 2 and volume > (sum(float(k[5]) for k in (klines_1h or [])[-10:]) / max(len(klines_1h[-10:]), 1)) * 1.5
+        ticker_infos.append({
+            "id": sym,
+            "ticker": {"id": sym, "name": name, "price": price, "volume": volume, "change_pct": change_pct},
+            "indicators": {
+                "rsi": round(calc_rsi(closes_1h, 14), 1),
+                "sma20": calc_sma(closes_1h, 20),
+                "ema12": calc_ema(closes_1h, 12) if closes_1h else price,
+                "ema26": calc_ema(closes_1h, 26) if closes_1h else price,
+                "volSurge": vol_surge,
+                "closes": closes_1h
+            }
+        })
+
+    signals_map = run_js_strategy(active_strategy, ticker_infos) or {}
+
+    # Pass 2: record signals, auto-execute trades, build ticker rows
+    for info in ticker_infos:
+        sym = info["id"]
+        name = info["ticker"]["name"]
+        pm = price_map.get(sym + "USDT")
         price = pm["price"]; change_pct = pm["change_pct"]; volume = pm["volume"]
+        closes_1h = info["indicators"]["closes"]
 
-        klines_1h = fetch_json(f"{BINANCE_BASE}/api/v3/klines?symbol={symbol}&interval=1h&limit=30")
-        klines_4h = fetch_json(f"{BINANCE_BASE}/api/v3/klines?symbol={symbol}&interval=4h&limit=30")
-        closes_1h = [float(k[4]) for k in klines_1h] if klines_1h else []
-        closes_4h = [float(k[4]) for k in klines_4h] if klines_4h else []
+        sig = signals_map.get(sym) or {}
+        signal = sig.get("signal", "HOLD") or "HOLD"
+        confidence = sig.get("confidence", 50) or 50
+        factors_dict = sig.get("factors") or {}
 
-        indicators = {
-            "rsi_1h": round(calc_rsi(closes_1h,14),1),
-            "sma_4h": calc_sma(closes_4h,20),
-            "sma_1h_20": calc_sma(closes_1h,20),
-            "ema_12": calc_ema(closes_1h,12) if closes_1h else price,
-            "ema_26": calc_ema(closes_1h,26) if closes_1h else price,
-            "vol_surge": len(closes_1h) >= 2 and volume > (sum(float(k[5]) for k in klines_1h[-10:]) / max(len(klines_1h[-10:]), 1)) * 1.5,
-            "closes_1h": closes_1h, "closes_4h": closes_4h
-        }
-
-        signal="HOLD"; confidence=50; factors_dict={}
-
-        # Record signal
-        with db_lock:
-            cur = db_conn.execute(
-                "INSERT INTO signals (symbol,signal,confidence,price,factors_json,strategy) VALUES (?,?,?,?,?,?)",
-                (sym,signal,confidence,price,json.dumps(factors_dict),strategy_name))
-            signal_id = cur.lastrowid
-            db_conn.commit()
+        # Record signal (skip HOLD rows — otherwise the table grows ~120k rows/day)
+        signal_id = None
+        if signal != "HOLD":
+            with db_lock:
+                cur = db_conn.execute(
+                    "INSERT INTO signals (symbol,signal,confidence,price,factors_json,strategy) VALUES (?,?,?,?,?,?)",
+                    (sym, signal, confidence, price, json.dumps(factors_dict), strategy_name))
+                signal_id = cur.lastrowid
+                db_conn.commit()
 
         # Auto-execute trade on BUY/SELL
         current_pos = positions_map.get(sym)
@@ -239,14 +383,14 @@ def fetch_all_data():
         elif trade_result is None and signal == "SELL":
             result["failed"] = result.get("failed", 0) + 1
 
-        sparkline = closes_1h[-18:] if len(closes_1h)>=18 else closes_1h
+        sparkline = closes_1h[-18:] if len(closes_1h) >= 18 else closes_1h
         result["tickers"].append({
-            "id":sym,"name":name,"price":price,"change_pct":change_pct,
-            "volume_m":round(volume/1_000_000,1),"signal":signal,"confidence":confidence,
-            "sparkline":sparkline,
-            "_rsi":round(indicators["rsi_1h"],1),
-            "_sma4h":round(indicators["sma_4h"],price<1 and 4 or 2),
-            "_vol_surge":indicators["vol_surge"]
+            "id": sym, "name": name, "price": price, "change_pct": change_pct,
+            "volume_m": round(volume / 1_000_000, 1), "signal": signal, "confidence": confidence,
+            "sparkline": sparkline,
+            "_rsi": round(info["indicators"]["rsi"], 1),
+            "_sma4h": round(info["indicators"]["sma20"], price < 1 and 4 or 2),
+            "_vol_surge": info["indicators"]["volSurge"]
         })
 
     # ---- Build logs ----
@@ -271,7 +415,7 @@ def fetch_all_data():
             if pos: pos_info = f' | POS: {pos["qty"]:.4f} @${pos["entry"]:.2f}'
             result["exec_log"].append({
                 "ts":ts,"type":t["signal"].lower(),
-                "html":f'[{ts}] {t["id"]} → <span style="color:{color}">{t["signal"]}</span> conf={t["confidence"]}%{pos_info}'
+                "html":f'[{ts}] {_esc(t["id"])} → <span style="color:{color}">{t["signal"]}</span> conf={t["confidence"]}%{pos_info}'
             })
 
     # Portfolio summary
@@ -313,19 +457,15 @@ def fetch_all_data():
         {"label":"NEUTRAL","value":min(1.0,(len(result["tickers"])-buys-sells)/max(len(result["tickers"]),1))},
     ]
 
-    # Real portfolio KPI
-    win_rate = 50.0
-    try:
-        closed = db_conn.execute("SELECT COUNT(*) FROM trades WHERE side='SELL'").fetchone()[0]
-        if closed>0: win_rate = min(95, 50+pnl/100)
-    except: pass
+    # Real portfolio KPI (None → frontend shows "--")
+    win_rate, sharpe, max_dd = portfolio_stats(INITIAL_CAPITAL)
 
     kpi = {
-        "sharpe": round(1.5+(pnl/5000),2),
-        "win_rate": round(win_rate,1),
-        "pnl_day": round(pnl,0),
-        "max_drawdown": round(max(0.5, abs(pnl)/INITIAL_CAPITAL*100*0.6),1),
-        "aum": round(total_equity,0)
+        "sharpe": sharpe,
+        "win_rate": round(win_rate, 1) if win_rate is not None else None,
+        "pnl_day": round(pnl, 0),
+        "max_drawdown": max_dd,
+        "aum": round(total_equity, 0)
     }
 
     return {
@@ -334,88 +474,6 @@ def fetch_all_data():
         "kpi":kpi,"factors":factors,
         "exec_log":list(exec_log[-50:]),
         "active_strategy":strategy_name,"order_flow":{},"rejected":result.get("rejected",0),"failed":result.get("failed",0)
-    }
-
-# ============================================================
-# BACKTEST ENGINE (on-the-fly)
-# ============================================================
-INITIAL_CAPITAL_BT = 10_000.0
-TRADE_SIZE_PCT_BT = 0.05
-WARMUP_DAYS = 30
-
-def _run_backtest(klines_data, strategy_mod):
-    dates = sorted(klines_data.keys())
-    closes_history = []
-    equity_curve = []
-    cash = INITIAL_CAPITAL_BT
-    position = None  # {qty, entry}
-    trade_count = 0
-    buy_count = 0
-    sell_count = 0
-
-    for i, date in enumerate(dates):
-        k = klines_data[date]
-        price = k["close"]
-        closes_history.append(price)
-        if i < WARMUP_DAYS:
-            pos_value = position["qty"] * price if position else 0
-            equity_curve.append(cash + pos_value)
-            continue
-
-        rsi_val = calc_rsi(closes_history, 14)
-        sma20 = calc_sma(closes_history, 20)
-        indicators = {
-            "rsi_1h": rsi_val, "sma_4h": sma20, "sma_1h_20": sma20,
-            "ema_12": calc_ema(closes_history, 12),
-            "ema_26": calc_ema(closes_history, 26),
-            "vol_surge": k["volume"] > 0,
-            "closes_1h": closes_history[-30:], "closes_4h": closes_history[-30:]
-        }
-        ticker = {"id": "ASSET", "name": "Asset", "price": price, "volume": k["volume"]}
-
-        try:
-            out = strategy_mod.evaluate(ticker, indicators)
-            signal = out.get("signal", "HOLD")
-        except:
-            signal = "HOLD"
-
-        if signal == "BUY":
-            notional = min(cash * TRADE_SIZE_PCT_BT, cash)
-            if notional >= 10:
-                qty = notional / price
-                cash -= notional
-                if position:
-                    new_qty = position["qty"] + qty
-                    position["entry"] = (position["entry"] * position["qty"] + price * qty) / new_qty
-                    position["qty"] = new_qty
-                else:
-                    position = {"qty": qty, "entry": price}
-                trade_count += 1; buy_count += 1
-        elif signal == "SELL" and position:
-            notional = position["qty"] * price
-            cash += notional
-            position = None
-            trade_count += 1; sell_count += 1
-
-        pos_value = position["qty"] * price if position else 0
-        equity_curve.append(cash + pos_value)
-
-    if position and dates:
-        cash += position["qty"] * klines_data[dates[-1]]["close"]
-    final_equity = cash
-    total_return = (final_equity - INITIAL_CAPITAL_BT) / INITIAL_CAPITAL_BT * 100
-
-    step = max(1, len(equity_curve) // 200)
-    sampled_eq = equity_curve[WARMUP_DAYS::step]
-    sampled_dates = dates[WARMUP_DAYS::step][:len(sampled_eq)]
-
-    return {
-        "final_equity": round(final_equity, 2),
-        "total_return_pct": round(total_return, 2),
-        "trades_count": trade_count,
-        "buy_count": buy_count, "sell_count": sell_count,
-        "equity_curve": sampled_eq,
-        "dates": sampled_dates
     }
 
 # ============================================================
@@ -435,11 +493,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             rows = db_conn.execute("SELECT symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy,opened_at FROM positions ORDER BY opened_at DESC").fetchall()
             self._json(200,{"positions":[{"symbol":r[0],"side":r[1],"entry_price":r[2],"quantity":r[3],"current_price":r[4],"unrealized_pnl":r[5],"strategy":r[6],"opened_at":r[7]} for r in rows]})
         elif self.path=="/api/trades":
-            rows = db_conn.execute("SELECT symbol,side,price,quantity,notional,status,strategy,created_at FROM trades ORDER BY created_at DESC LIMIT 50").fetchall()
+            rows = db_conn.execute("SELECT symbol,side,price,quantity,notional,status,strategy,created_at FROM trades ORDER BY created_at DESC LIMIT 200").fetchall()
             self._json(200,{"trades":[{"symbol":r[0],"side":r[1],"price":r[2],"quantity":r[3],"notional":r[4],"status":r[5],"strategy":r[6],"created_at":r[7]} for r in rows]})
         elif self.path=="/api/portfolio":
             pf = db_conn.execute("SELECT cash,initial_capital FROM portfolio WHERE id=1").fetchone()
-            pos_val = sum(r[2]*(r[0] or r[2]) for r in db_conn.execute("SELECT current_price,entry_price,quantity FROM positions").fetchall())
+            pos_val = sum(r[2]*(r[0] if r[0] else r[1]) for r in db_conn.execute("SELECT current_price,entry_price,quantity FROM positions").fetchall())
             self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,"total_equity":pf[0]+pos_val})
         elif self.path == "/api/symbols":
             rows = db_conn.execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()
@@ -464,18 +522,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
             except: self.send_error(404)
         elif self.path.startswith("/api/strategy/") and self.path.endswith("/code"):
-            fname = self.path.split("/api/strategy/")[1].replace("/code", "")
+            try:
+                fname = _safe_strategy_name(self.path.split("/api/strategy/")[1].replace("/code", ""))
+            except ValueError:
+                self._json(400, {"error": "Invalid strategy name"}); return
             path = os.path.join(STRATEGIES_DIR, fname)
             if not os.path.isfile(path):
                 self._json(404, {"error": "Strategy not found"})
             else:
                 with open(path, encoding="utf-8") as f: content = f.read()
-                import re
-                name_m = re.search(r'NAME\s*=\s*"([^"]+)"', content)
-                desc_m = re.search(r'DESCRIPTION\s*=\s*"([^"]+)"', content)
+                name, desc = _strategy_meta(content)
                 self._json(200, {"filename": fname, "code": content,
-                    "name": name_m.group(1) if name_m else fname,
-                    "description": desc_m.group(1) if desc_m else ""})
+                    "name": name or fname,
+                    "description": desc or ""})
 
         elif self.path == "/api/params/ref":
             ref = "parameter,type,description,example\n"                   "ticker.id,string,Symbol (e.g. BTC),BTC\n"                   "ticker.name,string,Full name (e.g. Bitcoin),Bitcoin\n"                   "ticker.price,number,Current price in USDT,65100.50\n"                   "ticker.volume,number,24h quote volume,1500000000\n"                   "ticker.change_pct,number,24h price change %,2.35\n"                   "indicators.rsi,number,RSI(14) 0-100,45.2\n"                   "indicators.sma20,number,SMA(20),65050.10\n"                   "indicators.ema12,number,EMA(12),65120.00\n"                   "indicators.ema26,number,EMA(26),65080.50\n"                   "indicators.volSurge,boolean,Volume > 1.5x average,true\n"                   "indicators.closes,array[number],Last 30 close prices,[65100,65050,...]\n"                   "return.signal,string,BUY|SELL|HOLD|WAIT,BUY\n"                   "return.confidence,number,0-100,82\n"                   "return.factors,object,Optional factor values for logging,{rsi:45.2}\n"
@@ -487,19 +546,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         else:
-            super().do_GET()
+            self.send_error(404)
 
     def do_POST(self):
         if self.path=="/api/strategy/activate":
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
-            fname = body.get("filename","")
+            try:
+                fname = _safe_strategy_name(body.get("filename",""))
+            except ValueError:
+                self._json(400, {"error": "Invalid strategy name"}); return
             path = os.path.join(STRATEGIES_DIR, fname)
-            if os.path.isfile(path) and fname.endswith(".js"):
+            if os.path.isfile(path):
                 global active_strategy; active_strategy=fname
-                import re
-                with open(path) as f:
-                    name_m = re.search(r'NAME\s*=\s*"([^"]+)"', f.read())
-                self._json(200,{"active":fname,"name":name_m.group(1) if name_m else fname})
+                with open(path, encoding="utf-8") as f:
+                    name, _ = _strategy_meta(f.read())
+                self._json(200,{"active":fname,"name":name or fname})
             else: self._json(400,{"error":f"Unknown: {fname}"})
         elif self.path=="/api/trade/simulate":
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
@@ -518,20 +579,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200,{"status":"reset","capital":INITIAL_CAPITAL})
         elif self.path == "/api/strategy/create":
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
-            fname = body.get("filename","").strip()
-            if not fname.endswith(".py"): fname += ".py"
+            try:
+                fname = _safe_strategy_name(body.get("filename","").strip() or "new_strategy.js")
+            except ValueError:
+                self._json(400, {"error": "Strategy name must be [A-Za-z0-9_-].js"}); return
             path = os.path.join(STRATEGIES_DIR, fname)
             if os.path.isfile(path):
                 self._json(400, {"error":"Strategy already exists"})
             else:
-                template = body.get("code", '"""New Strategy."""\nNAME = "New Strategy"\nDESCRIPTION = ""\n\ndef evaluate(ticker, indicators):\n    return {"signal":"HOLD","confidence":50}')
+                template = body.get("code",
+                    '({\n  NAME: "New Strategy",\n  DESCRIPTION: "",\n  evaluate: function(ticker, indicators) {\n    return {signal: "HOLD", confidence: 50};\n  }\n})')
                 with open(path, "w", encoding="utf-8") as f: f.write(template)
-                with open(path) as f: content = f.read()
-                import re
-                name_m = re.search(r'NAME\s*=\s*"([^"]+)"', content)
-                self._json(200, {"status":"created","filename":fname,"name":name_m.group(1) if name_m else fname})
+                name, _ = _strategy_meta(template)
+                self._json(200, {"status":"created","filename":fname,"name":name or fname})
         elif self.path.startswith("/api/strategy/") and self.path.endswith("/delete"):
-            fname = self.path.split("/api/strategy/")[1].replace("/delete", "")
+            try:
+                fname = _safe_strategy_name(self.path.split("/api/strategy/")[1].replace("/delete", ""))
+            except ValueError:
+                self._json(400, {"error": "Invalid strategy name"}); return
             path = os.path.join(STRATEGIES_DIR, fname)
             if not os.path.isfile(path):
                 self._json(404, {"error":"Strategy not found"})
@@ -541,7 +606,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     active_strategy = "default.js"
                 self._json(200, {"status":"deleted","filename":fname})
         elif self.path.startswith("/api/strategy/") and self.path.endswith("/save"):
-            fname = self.path.split("/api/strategy/")[1].replace("/save", "")
+            try:
+                fname = _safe_strategy_name(self.path.split("/api/strategy/")[1].replace("/save", ""))
+            except ValueError:
+                self._json(400, {"error": "Invalid strategy name"}); return
             path = os.path.join(STRATEGIES_DIR, fname)
             if not os.path.isfile(path):
                 self._json(404, {"error": "Strategy not found"})
@@ -549,32 +617,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
                 new_code = body.get("code", "")
                 if new_code:
-                    with open(path, "w") as f: f.write(new_code)
-                    with open(path, "w", encoding="utf-8") as f: f.write(code)
-                    import re
-                    name_m = re.search(r'NAME\s*=\s*"([^"]+)"', code)
-                    self._json(200, {"name": name_m.group(1) if name_m else fname, "filename": fname})
+                    with open(path, "w", encoding="utf-8") as f: f.write(new_code)
+                    name, _ = _strategy_meta(new_code)
+                    self._json(200, {"name": name or fname, "filename": fname})
                 else:
                     self._json(400, {"error": "No code provided"})
 
         elif self.path == "/api/backtest/run":
-            # Run backtest on-the-fly: read historical_klines, run all strategies against ALL symbols
+            # Run backtest on-the-fly: evaluate all JS strategies against all
+            # symbols' historical klines via node subprocess (one call per strategy).
             symbols_in_db = db_conn.execute("SELECT DISTINCT symbol FROM historical_klines").fetchall()
             if not symbols_in_db:
-                self._json(400, {"error": "No historical data. Run: python3 backtest_runner.py --download"})
+                self._json(400, {"error": "No historical data. Run: python3 init_db.py"})
+                return
+            if not HAS_NODE:
+                self._json(400, {"error": "Node.js not found — required for JS backtest engine"})
                 return
 
-            results = []
+            symbols_klines = {}
             for (sym,) in symbols_in_db:
                 rows = db_conn.execute("SELECT date,open,high,low,close,volume FROM historical_klines WHERE symbol=? ORDER BY date", (sym,)).fetchall()
-                if not rows: continue
-                klines_data = {}
-                for r in rows:
-                    klines_data[r[0]] = {"open":r[1],"high":r[2],"low":r[3],"close":r[4],"volume":r[5]}
+                if not rows:
+                    continue
+                symbols_klines[sym] = [{"date": r[0], "open": r[1], "high": r[2], "low": r[3], "close": r[4], "volume": r[5]} for r in rows]
 
-                for strat_info in list_js_strategies():
-                    bt = {"symbol": sym, "strategy": strat_info["name"], "final_equity": 0, "total_return_pct": 0, "trades_count": 0, "buy_count": 0, "sell_count": 0, "equity_curve": [], "dates": []}
-                    results.append(bt)
+            results = []
+            for strat_info in list_js_strategies():
+                bt_map = run_js_backtests(strat_info["filename"], symbols_klines)
+                for sym, bt in bt_map.items():
+                    bt = dict(bt)
+                    bt.update({"symbol": sym, "strategy": strat_info["name"]})
                     results.append(bt)
 
             self._json(200, {"backtests": results, "count": len(results)})
@@ -594,6 +666,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_DELETE(self):
         if self.path.startswith("/api/symbols/"):
             sym = self.path.split("/api/symbols/")[1].upper()
+            if not re.fullmatch(r"[A-Z0-9]+USDT", sym):
+                self._json(400, {"error": "Invalid symbol"}); return
             db_conn.execute("DELETE FROM watchlist WHERE symbol=?", (sym,))
             db_conn.commit(); reload_symbols()
             self._json(200, {"status":"deleted","symbol":sym})
@@ -609,6 +683,10 @@ def main():
     port=8899
     print(f"Quant Fleet on http://localhost:{port}")
     print(f"Initial capital: ${INITIAL_CAPITAL:,.0f}")
+    if HAS_NODE:
+        print(f"Node.js: OK (strategy eval + backtest engine)")
+    else:
+        print(f"WARNING: Node.js not found — strategies will stay HOLD and backtest is disabled")
     server=http.server.HTTPServer(("0.0.0.0",port),Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: db_conn.close(); server.shutdown()
