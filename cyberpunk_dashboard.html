@@ -501,15 +501,15 @@ function renderRadar(){
 var radarPulse=0,radarAnimId=null;
 function animateRadar(){
   if(!document.getElementById('factorRadar'))return;
-  radarPulse=(radarPulse+0.05)%(Math.PI*2);
+  radarPulse=(radarPulse+0.08)%(Math.PI*2);
   var rd=document.getElementById('factorRadar'),rctx2=rd.getContext('2d');
-  var cx=105,cy=105,glow=Math.max(1,4+Math.sin(radarPulse)*2);
+  var cx=105,cy=105,glow=Math.max(2,4+Math.sin(radarPulse)*1);
   rctx2.beginPath();rctx2.arc(cx,cy,glow,0,Math.PI*2);
-  rctx2.fillStyle='#00FF66';rctx2.shadowColor='#00FF66';rctx2.shadowBlur=Math.max(1,10+Math.sin(radarPulse)*6);
+  rctx2.fillStyle='#00FF66';rctx2.shadowColor='#00FF66';rctx2.shadowBlur=Math.max(4,8+Math.sin(radarPulse)*3);
   rctx2.fill();rctx2.shadowBlur=0;
-  var ringR=Math.max(0.5,6+Math.sin(radarPulse)*8);
+  var ringR=Math.max(1,5+Math.sin(radarPulse)*3);
   rctx2.beginPath();rctx2.arc(cx,cy,ringR,0,Math.PI*2);
-  rctx2.strokeStyle='rgba(0,255,102,'+Math.max(0.05,0.4-Math.sin(radarPulse)*0.3)+')';rctx2.lineWidth=1;
+  rctx2.strokeStyle='rgba(0,255,102,'+Math.max(0.05,0.25-Math.sin(radarPulse)*0.15)+')';rctx2.lineWidth=1;
   rctx2.stroke();
   radarAnimId=requestAnimationFrame(animateRadar);
 }
