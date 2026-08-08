@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FLEET x GRAPH - Cyberpunk Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { mono: ["JetBrains Mono","Fira Code","Share Tech Mono","IBM Plex Mono","monospace"] },
+      colors: {
+        cyber: {
+          bg:    '#08090C',
+          panel: '#0F1117',
+          border:'#1E222D',
+          cyan:  '#00E5FF',
+          green: '#00FF66',
+          yellow:'#FFCC00',
+          red:   '#FF2A6D',
+          muted: '#5A6275'
+        }
+      }
+    }
+  }
+}
+</script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#08090C;color:#c0c8d8;font-family:"JetBrains Mono","Fira Code","Share Tech Mono",monospace;overflow:hidden}
+  ::-webkit-scrollbar{width:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#1E222D;border-radius:2px}
+  .glow-cyan{text-shadow:0 0 6px #00E5FF40,0 0 1px #00E5FF}
+  .glow-green{text-shadow:0 0 6px #00FF6640,0 0 1px #00FF66}
+  .glow-red{text-shadow:0 0 6px #FF2A6D40,0 0 1px #FF2A6D}
+  .glow-yellow{text-shadow:0 0 6px #FFCC0040,0 0 1px #FFCC00}
+  .dot-cyan{display:inline-block;width:6px;height:6px;border-radius:50%;background:#00E5FF;box-shadow:0 0 8px #00E5FF;margin-right:6px;animation:pulse 2s infinite}
+  .dot-green{display:inline-block;width:6px;height:6px;border-radius:50%;background:#00FF66;box-shadow:0 0 8px #00FF66;margin-right:6px;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .badge-cyan{background:#00E5FF15;color:#00E5FF;border:1px solid #00E5FF30;padding:1px 8px;border-radius:3px;font-size:11px}
+  .badge-green{background:#00FF6615;color:#00FF66;border:1px solid #00FF6630;padding:1px 8px;border-radius:3px;font-size:11px}
+  .badge-yellow{background:#FFCC0015;color:#FFCC00;border:1px solid #FFCC0030;padding:1px 8px;border-radius:3px;font-size:11px}
+  .badge-red{background:#FF2A6D15;color:#FF2A6D;border:1px solid #FF2A6D30;padding:1px 8px;border-radius:3px;font-size:11px}
+  .pill-running{background:#00FF6620;color:#00FF66;border:1px solid #00FF6640;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:600;animation:pulse 2s infinite}
+  .panel{border:1px solid #1E222D;background:#0F1117}
+</style>
+</head>
+<body class="flex flex-col h-screen">
+
+<!-- TOP BAR -->
+<header class="flex items-center justify-between px-4 py-2 border-b border-[#1E222D] bg-[#0A0C12] shrink-0">
+  <div class="flex items-center gap-6">
+    <span class="text-[#00E5FF] font-bold text-sm tracking-wider glow-cyan">FLEET x GRAPH</span>
+    <span class="text-[#5A6275] text-xs">// ROUTE RAIL <span class="text-[#00E5FF]">[16]</span></span>
+  </div>
+  <div class="flex items-center gap-5 text-xs">
+    <span class="text-[#5A6275]">LAT <span class="text-[#00E5FF]">01.3ms</span></span>
+    <span class="text-[#5A6275]">FRESH <span class="text-[#00FF66]">CTX</span></span>
+    <span><span class="dot-green"></span><span class="text-[#00FF66]">ONLINE</span></span>
+  </div>
+</header>
+
+<!-- MAIN 3-COL LAYOUT -->
+<main class="flex flex-1 overflow-hidden">
+
+  <!-- LEFT: ROUTE RAIL -->
+  <aside class="w-[23%] border-r border-[#1E222D] overflow-y-auto p-2 space-y-1.5 flex-shrink-0">
+    <div id="routeRail"></div>
+  </aside>
+
+  <!-- CENTER -->
+  <section class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- Panel A: Fan Out + Radar -->
+    <div class="flex border-b border-[#1E222D]" style="height:42%">
+      <div class="w-[55%] border-r border-[#1E222D] p-3 overflow-y-auto">
+        <div class="text-xs text-[#5A6275] mb-2">ROUTE  HITS  VERIFY</div>
+        <div class="space-y-0.5 text-xs" id="routeStatusList"></div>
+      </div>
+      <div class="w-[45%] flex flex-col items-center justify-center p-3">
+        <canvas id="radarCanvas" width="200" height="200"></canvas>
+        <div class="grid grid-cols-4 gap-2 mt-2 w-full">
+          <div class="text-center"><div class="text-[#00E5FF] text-sm font-bold">000.37</div><div class="text-[9px] text-[#5A6275]">SWAP/s</div></div>
+          <div class="text-center"><div class="text-[#00FF66] text-sm font-bold">010.61</div><div class="text-[9px] text-[#5A6275]">SPEEDUPx</div></div>
+          <div class="text-center"><div class="text-[#FFCC00] text-sm font-bold">00B.3B</div><div class="text-[9px] text-[#5A6275]">COST RED%</div></div>
+          <div class="text-center"><div class="text-[#FF2A6D] text-sm font-bold">008.67</div><div class="text-[9px] text-[#5A6275]">DILUTEx</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel B: Phase Matrix -->
+    <div class="border-b border-[#1E222D] p-2" style="height:10%">
+      <div class="text-[10px] text-[#5A6275] mb-1">WORKER x PHASE <span class="text-[#00E5FF]">(con - verify - merge)</span></div>
+      <div class="flex gap-1 h-[28px]" id="phaseMatrix"></div>
+    </div>
+
+    <!-- Panel C: Pipeline Flow -->
+    <div class="border-b border-[#1E222D] p-2" style="height:14%">
+      <div class="text-[10px] text-[#5A6275] mb-1">"AND THEN" AUDIT -- does the next step read the previous output</div>
+      <canvas id="flowCanvas" width="700" height="50" class="w-full"></canvas>
+      <div class="text-center text-[10px] text-[#00FF66] glow-green mt-0.5">[ VERIFYING OH FRESH CONTENT... ]</div>
+    </div>
+
+    <!-- Panel D+E: Orchestrator + Tally -->
+    <div class="flex flex-1 overflow-hidden">
+      <div class="w-[62%] border-r border-[#1E222D] p-3 overflow-y-auto">
+        <pre class="text-xs leading-relaxed"><span class="text-[#5A6275]"># Orchestrator: build a graph, not a chain</span>
+<span class="text-[#FF2A6D]">graph</span> <span class="text-[#5A6275]">=</span> <span class="text-[#FFCC00]">Graph</span><span class="text-[#5A6275]">(workers=</span><span class="text-[#00FF66]">16</span><span class="text-[#5A6275]">, share_state=</span><span class="text-[#FF2A6D]">False</span><span class="text-[#5A6275]">)</span>
+<span class="text-[#FF2A6D]">for</span> route <span class="text-[#FF2A6D]">in</span> routes:<span class="text-[#5A6275]">          # fan out</span>
+    graph.<span class="text-[#FFCC00]">node</span>(audit, route)
+<span class="text-[#FF2A6D]">for</span> hit <span class="text-[#FF2A6D]">in</span> graph.results:<span class="text-[#5A6275]">     # fresh ctx</span>
+    graph.<span class="text-[#FFCC00]">node</span>(verify, hit, reuse=<span class="text-[#FF2A6D]">False</span>)
+<span class="text-[#00E5FF]">assert</span> verifier <span class="text-[#FF2A6D]">is not</span> author
+<span class="text-[#FFCC00]">merge</span>(confirmed_to_report)</pre>
+      </div>
+      <div class="w-[38%] p-3 flex flex-col justify-between">
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">SCANNED</span> <span class="text-[#00E5FF]">20</span></div>
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">OK</span> <span class="text-[#5A6275]">8</span></div>
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">CONFIRMED</span> <span class="text-[#00FF66]">3</span></div>
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">PENDING</span> <span class="text-[#FFCC00]">3</span></div>
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">REJECTED</span> <span class="text-[#FF2A6D]">4</span></div>
+        </div>
+        <div>
+          <div class="text-right text-[#00E5FF] text-lg font-bold">6502</div>
+          <div class="text-right text-[10px] text-[#5A6275]">TOTAL</div>
+          <canvas id="tallyBar" width="150" height="14" class="ml-auto mt-1"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: STREAM LOG -->
+  <aside class="w-[23%] border-l border-[#1E222D] overflow-y-auto p-2 flex-shrink-0">
+    <div class="text-[10px] text-[#00E5FF] mb-2 glow-cyan">// STREAM LOG <span class="text-[#00FF66]">[live]</span></div>
+    <div id="streamLog" class="text-[10px] leading-relaxed space-y-0.5"></div>
+  </aside>
+
+</main>
+
+<!-- BOTTOM BAR -->
+<footer class="flex items-center justify-between px-4 py-2 border-t border-[#1E222D] bg-[#0A0C12] shrink-0">
+  <span class="text-[#00E5FF] text-xs"><span class="text-[#5A6275]">&gt;</span> audit every route handler for a missing auth check <span class="animate-pulse">|</span></span>
+  <span class="pill-running">RUNNING GRAPH</span>
+</footer>
+
+<script>
+var ROUTES = (function(){
+  var arr = [];
+  for(var i=0;i<16;i++){
+    var n=i+1;
+    var hits=Math.floor(Math.random()*8+1);
+    var sts=['CONFIRMED','CONFIRMED','PENDING','PENDING','REJECTED'];
+    arr.push({
+      id:'r'+String(n).padStart(2,'0'),
+      name:'ROUTE_'+String(n).padStart(2,'0'),
+      hits:hits,
+      metric:'0'+String(n*13).slice(-3),
+      ms:(Math.random()*5+0.3).toFixed(1),
+      status:sts[Math.floor(Math.random()*5)]
+    });
+  }
+  return arr;
+})();
+
+// ---- ROUTE RAIL (Left) ----
+var rail=document.getElementById('routeRail');
+ROUTES.forEach(function(r,i){
+  var card=document.createElement('div');
+  card.className='panel p-2 cursor-pointer hover:border-[#00E5FF40] transition-colors';
+  card.innerHTML='<div class="flex justify-between items-center mb-1">'+
+    '<span class="text-[#00E5FF] text-[11px] font-bold">'+r.name+'</span>'+
+    '<span class="text-[#5A6275] text-[10px]">'+r.metric+'.'+i+'k</span></div>'+
+    '<canvas class="w-full" height="18" data-route="'+r.name+'" style="width:100%"></canvas>'+
+    '<div class="text-[9px] text-[#5A6275] mt-1">NODES '+r.hits+'  QPS0  '+r.ms+'ms</div>';
+  rail.appendChild(card);
+});
+
+function drawSparklines(){
+  var cans=document.querySelectorAll('#routeRail canvas'),c;
+  for(c=0;c<cans.length;c++){
+    var can=cans[c],w=can.parentElement.clientWidth-4,j,pts=[];
+    can.width=w;
+    var ctx=can.getContext('2d'),h=can.height;
+    for(j=0;j<12;j++)pts.push(Math.random()*h*0.7+h*0.15);
+    ctx.strokeStyle='#00E5FF60';ctx.lineWidth=0.8;ctx.beginPath();
+    for(j=0;j<pts.length;j++){var x=(j/(pts.length-1))*w;j===0?ctx.moveTo(x,pts[j]):ctx.lineTo(x,pts[j]);}
+    ctx.stroke();ctx.fillStyle='#00E5FF15';ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();ctx.fill();
+  }
+}
+setTimeout(drawSparklines,80);
+
+// ---- ROUTE STATUS TABLE ----
+var sl=document.getElementById('routeStatusList');
+ROUTES.forEach(function(r){
+  var b=r.status==='CONFIRMED'?'badge-cyan':r.status==='PENDING'?'badge-yellow':'badge-red';
+  sl.innerHTML+='<div class="flex items-center gap-4 py-0.5 border-b border-[#1E222D40]">'+
+    '<span class="text-[#00E5FF] w-8">'+r.id+'</span>'+
+    '<span class="text-[#5A6275] w-6">'+r.hits+'</span>'+
+    '<span class="'+b+'">'+r.status+'</span></div>';
+});
+
+// ---- RADAR ----
+var radar=document.getElementById('radarCanvas');
+var rctx=radar.getContext('2d');
+var cx=100,cy=100,rr=80,i;
+var nodeCoords=[];
+for(i=0;i<20;i++){
+  var a=(i/20)*Math.PI*2-Math.PI/2;
+  var dist=rr*(0.5+Math.random()*0.5);
+  nodeCoords.push({nx:cx+Math.cos(a)*dist,ny:cy+Math.sin(a)*dist,confirmed:i<5||(i>10&&i<14)});
+}
+function drawRadar(pulse){
+  rctx.clearRect(0,0,200,200);
+  for(i=1;i<=3;i++){rctx.beginPath();rctx.arc(cx,cy,rr*i/3,0,Math.PI*2);rctx.strokeStyle='#1E222D';rctx.lineWidth=0.5;rctx.stroke();}
+  for(i=0;i<20;i++){
+    var nd=nodeCoords[i];
+    rctx.beginPath();rctx.moveTo(cx,cy);rctx.lineTo(nd.nx,nd.ny);
+    rctx.strokeStyle='#1E222D60';rctx.lineWidth=0.4;rctx.stroke();
+    rctx.beginPath();rctx.arc(nd.nx,nd.ny,2.5,0,Math.PI*2);
+    rctx.fillStyle=nd.confirmed?'#00FF66':'#1E222D';rctx.fill();
+    if(i%3===0){rctx.fillStyle='#5A6275';rctx.font='7px monospace';rctx.fillText('r'+String(i+1).padStart(2,'0'),nd.nx-10,nd.ny-6);}
+  }
+  if(pulse!==undefined){
+    rctx.beginPath();rctx.arc(cx,cy,pulse+1,0,Math.PI*2);
+    rctx.strokeStyle='rgba(0,229,255,'+(1-pulse/15)+')';rctx.lineWidth=1;rctx.stroke();
+  }
+  rctx.beginPath();rctx.arc(cx,cy,6,0,Math.PI*2);rctx.fillStyle='#00FF66';rctx.shadowColor='#00FF66';rctx.shadowBlur=14;rctx.fill();rctx.shadowBlur=0;
+}
+drawRadar(0);
+
+// ---- PHASE MATRIX ----
+var matrix=document.getElementById('phaseMatrix'),w,p;
+for(w=0;w<16;w++){
+  var col=document.createElement('div');col.className='flex flex-col gap-px flex-1';
+  for(p=0;p<3;p++){
+    var bar=document.createElement('div');bar.className='flex-1 rounded-sm';bar.style.height='8px';
+    var v=Math.random();
+    bar.style.background=v>0.85?'linear-gradient(90deg,#00E5FF,#00E5FF40)':v>0.6?'linear-gradient(90deg,#00FF66,#00FF6640)':'#1E222D';
+    col.appendChild(bar);
+  }
+  matrix.appendChild(col);
+}
+
+// ---- PIPELINE FLOW ----
+var fc=document.getElementById('flowCanvas');
+fc.width=fc.parentElement.clientWidth-16;
+var fctx=fc.getContext('2d'),fw=fc.width,fh=fc.height;
+var fnodes=[
+  {x:30,y:fh/2,label:'r02',color:'#5A6275'},{x:90,y:fh/2,label:'r03',color:'#5A6275'},
+  {x:170,y:fh/2,label:'verify',color:'#00FF66'},{x:270,y:fh/2,label:'r05',color:'#5A6275'},
+  {x:330,y:fh/2,label:'r06',color:'#5A6275'},{x:400,y:fh/2,label:'merge',color:'#00FF66'},
+  {x:480,y:fh/2,label:'r08',color:'#5A6275'},{x:540,y:fh/2,label:'r09',color:'#5A6275'},
+  {x:610,y:fh/2,label:'report',color:'#00E5FF'}
+];
+var fedges=[[0,1,'no edge','#FF2A6D'],[1,2,'REAL EDGE','#00FF66'],[2,3,'no edge','#FF2A6D'],
+[3,4,'no edge','#FF2A6D'],[4,5,'REAL EDGE','#00FF66'],[5,6,'no edge','#FF2A6D'],
+[6,7,'no edge','#FF2A6D'],[7,8,'REAL EDGE','#00E5FF']];
+var e,n,ed;
+for(e=0;e<fedges.length;e++){
+  ed=fedges[e];
+  fctx.beginPath();fctx.moveTo(fnodes[ed[0]].x+10,fnodes[ed[0]].y);fctx.lineTo(fnodes[ed[1]].x-10,fnodes[ed[1]].y);
+  fctx.strokeStyle=ed[3];fctx.lineWidth=0.8;
+  if(ed[3]==='#FF2A6D')fctx.setLineDash([2,4]);else fctx.setLineDash([]);
+  fctx.stroke();fctx.setLineDash([]);
+  fctx.fillStyle=ed[3];fctx.font='7px monospace';
+  fctx.fillText(ed[2],(fnodes[ed[0]].x+fnodes[ed[1]].x)/2-16,fnodes[ed[0]].y-5);
+}
+for(n=0;n<fnodes.length;n++){
+  var nd=fnodes[n];
+  fctx.beginPath();fctx.arc(nd.x,nd.y,5,0,Math.PI*2);fctx.fillStyle=nd.color;fctx.fill();
+  if(nd.color==='#00FF66'||nd.color==='#00E5FF'){fctx.shadowColor=nd.color;fctx.shadowBlur=6;fctx.fill();fctx.shadowBlur=0;}
+  fctx.fillStyle='#5A6275';fctx.font='8px monospace';fctx.fillText(nd.label,nd.x-12,nd.y+16);
+}
+
+// ---- TALLY BAR ----
+var tb=document.getElementById('tallyBar'),tctx=tb.getContext('2d');
+var segs=[{pct:0.31,color:'#00E5FF'},{pct:0.12,color:'#5A6275'},{pct:0.05,color:'#00FF66'},{pct:0.05,color:'#FFCC00'},{pct:0.06,color:'#FF2A6D'},{pct:0.41,color:'#1E222D'}];
+var sx=0,s;
+for(s=0;s<segs.length;s++){var sw=tb.width*segs[s].pct;tctx.fillStyle=segs[s].color;tctx.fillRect(sx,0,sw,tb.height);sx+=sw;}
+
+// ---- STREAM LOG ----
+var logEl=document.getElementById('streamLog'),logIdx=0,MAX_LOG=50;
+function addLog(line){
+  var div=document.createElement('div');div.innerHTML=line;div.className='py-px';logEl.appendChild(div);
+  if(logEl.children.length>MAX_LOG)logEl.removeChild(logEl.firstChild);
+  logEl.parentElement.scrollTop=logEl.parentElement.scrollHeight;
+}
+var INIT_LOG=[
+  "[0140] scan #01 guard present",
+  "[0141] route #01 indexed",
+  "[0142] edge #02 -> verify checked",
+  "[0143] queue depth 3 workers idle 3",
+  "[0144] ctx worker 05 opened fresh",
+  "[0150] verify #02 <span class='text-[#00FF66]'>CONFIRMED</span>",
+  "[0154] verify #04 <span class='text-[#FF2A6D]'>REJECTED</span>",
+  "[0156] scan #08 <span class='text-[#FFCC00]'>MISSING auth</span>",
+  "[0160] route #11 indexed",
+  "[0162] ctx worker 02 opened fresh",
+  "[0165] edge #03 -> merge validated",
+  "[0170] verify #07 <span class='text-[#00FF66]'>CONFIRMED</span>",
+  "[0174] queue depth 5 workers idle 3",
+  "[0178] verify #11 <span class='text-[#00FF66]'>CONFIRMED</span>",
+  "[0182] edge #07 -> verify failed",
+  "[0185] scan #03 guard present",
+  "[0190] verify #16 <span class='text-[#00FF66]'>CONFIRMED</span>",
+  "[0194] verify #09 <span class='text-[#FF2A6D]'>REJECTED</span>",
+  "[0198] merge pipeline complete"
+];
+var li;
+for(li=0;li<INIT_LOG.length;li++)addLog(INIT_LOG[li]);
+
+setInterval(function(){
+  var live=[
+    '['+String(200+logIdx).padStart(4,'0')+'] scan #'+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+' guard present',
+    '['+String(201+logIdx).padStart(4,'0')+'] route #'+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+' indexed',
+    '['+String(202+logIdx).padStart(4,'0')+'] ctx worker '+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+' opened fresh',
+    '['+String(203+logIdx).padStart(4,'0')+'] queue depth '+Math.floor(Math.random()*8+1)+' workers idle '+Math.floor(Math.random()*6+1),
+    '['+String(204+logIdx).padStart(4,'0')+"] verify #"+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+" <span class='text-[#00FF66]'>CONFIRMED</span>",
+    '['+String(205+logIdx).padStart(4,'0')+"] verify #"+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+" <span class='text-[#FF2A6D]'>REJECTED</span>",
+    '['+String(206+logIdx).padStart(4,'0')+"] scan #"+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+" <span class='text-[#FFCC00]'>MISSING auth</span>"
+  ];
+  addLog(live[Math.floor(Math.random()*live.length)]);
+  logIdx++;
+},800+Math.random()*600);
+
+// ---- ANIMATE RADAR ----
+var pulseR=0;
+function animRadar(){
+  pulseR=(pulseR+0.3)%15;drawRadar(pulseR);requestAnimationFrame(animRadar);
+}
+animRadar();
+
+// ---- ANIMATE SPARKLINES ----
+setInterval(drawSparklines,3000);
+</script>
+</body>
+</html>
