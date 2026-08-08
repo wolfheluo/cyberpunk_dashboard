@@ -249,10 +249,10 @@ function renderStrategyMatrix(){
   for(var w=0;w<sm.strategies.length;w++){var col=document.createElement('div');col.className='flex flex-col gap-px flex-1';for(var p=0;p<sm.timeframes.length;p++){var bar=document.createElement('div');bar.className='flex-1 rounded-sm';bar.style.height='5px';var cell=null;for(var ci=0;ci<sm.cells.length;ci++){if(sm.cells[ci][0]===w&&sm.cells[ci][1]===p){cell=sm.cells[ci];break;}}var s=cell?cell[2]:'idle';bar.style.background=s==='active'?'linear-gradient(90deg,#00E5FF,#00E5FF40)':s==='warming'?'linear-gradient(90deg,#FFCC00,#FFCC0040)':s==='error'?'linear-gradient(90deg,#FF2A6D,#FF2A6D40)':'#1E222D';col.appendChild(bar);}mx.appendChild(col);}
 }
 
-var pipePulse=0,pipeAnimId=null;
+var pipePulse=0,pipeAnimId=null,pipeHasSignal='wait',pipeSignalAge=0;
 function renderPipeline(pulse){
   var c=document.getElementById('pipelineCanvas');if(!c)return;
-  var p=c.parentElement;c.width=p.clientWidth-16;c.height=p.clientHeight-4;
+  var p=c.parentElement;c.width=p.clientWidth-16;c.height=Math.max(p.clientHeight-4,50);
   var ctx=c.getContext('2d'),w=c.width,h=c.height;
   var cx=15,cy=h*0.5,step=(w-30)/7;
   var t=pulse||0;
@@ -266,22 +266,24 @@ function renderPipeline(pulse){
     {x:cx+step*6,y:cy,label:'FILL',color:'#00FF66',active:true},
     {x:cx+step*7,y:cy,label:'DONE',color:'#00E5FF',active:true}
   ];
-  var activeEdges=[[0,2],[2,4],[4,6],[6,7]];
   var allEdges=[
     [0,1,'','#FF2A6D'],[0,2,'signal','#00E5FF'],
     [2,3,'','#FF2A6D'],[2,4,'pass','#00FF66'],
     [4,5,'','#FF2A6D'],[4,6,'exec','#00FF66'],
     [6,7,'settle','#00E5FF']
   ];
+  var activeEdges;
+  if(pipeHasSignal==='reject')activeEdges=[[0,2],[2,3],[3,0]];
+  else if(pipeHasSignal==='fail')activeEdges=[[0,2],[2,4],[4,5],[5,0]];
+  else if(pipeHasSignal==='exec')activeEdges=[[0,2],[2,4],[4,6],[6,7]];
+  else activeEdges=[[0,1],[1,0]];
   ctx.lineWidth=0.8;
   for(var i=0;i<allEdges.length;i++){
-    var e=allEdges[i],a=nodes[e[0]],b=nodes[e[1]],isActive=false;
-    for(var j=0;j<activeEdges.length;j++){if(activeEdges[j][0]===e[0]&&activeEdges[j][1]===e[1]){isActive=true;break;}}
+    var e=allEdges[i],a=nodes[e[0]],b=nodes[e[1]];
     ctx.beginPath();ctx.moveTo(a.x+12,a.y);ctx.lineTo(b.x-12,b.y);
     ctx.strokeStyle=e[3];ctx.setLineDash(e[3]==='#FF2A6D'?[2,4]:[]);ctx.stroke();ctx.setLineDash([]);
     ctx.fillStyle=e[3];ctx.font='11px monospace';ctx.fillText(e[2],(a.x+b.x)/2-12,a.y+14);
   }
-  // Flowing dot on active path
   if(t!==undefined){
     var segCount=activeEdges.length,segIdx=Math.floor((t%(segCount*2))/2);
     var segProgress=((t%(segCount*2))%2)/2;
@@ -294,9 +296,7 @@ function renderPipeline(pulse){
   }
   for(var n=0;n<nodes.length;n++){
     var nd=nodes[n],br=nd.label==='SIGNAL'||nd.label==='DONE'?6:4;
-    if(nd.active&&t!==undefined){
-      br+=Math.sin(t+n*0.5)*1.5;
-    }
+    if(nd.active&&t!==undefined)br+=Math.sin(t+n*0.5)*1.5;
     br=Math.max(2,br);
     ctx.beginPath();ctx.arc(nd.x,nd.y,br,0,Math.PI*2);ctx.fillStyle=nd.color;ctx.fill();
     if(nd.active){ctx.shadowColor=nd.color;ctx.shadowBlur=Math.max(2,5+Math.sin(t+n*0.5)*3);ctx.fill();ctx.shadowBlur=0;}
@@ -306,6 +306,15 @@ function renderPipeline(pulse){
 function animatePipeline(){
   if(!document.getElementById('pipelineCanvas')){pipeAnimId=null;return;}
   pipePulse=(pipePulse+0.06)%(8*2);
+  if(DATA&&DATA.tickers){
+    var hasBuy=false,hasReject=(DATA.rejected||0)>0,hasFail=(DATA.failed||0)>0;
+    for(var i=0;i<DATA.tickers.length;i++){if(DATA.tickers[i].signal==='BUY'){hasBuy=true;break;}}
+    if(hasReject&&pipeHasSignal!=='exec'){pipeHasSignal='reject';pipeSignalAge=0;}
+    else if(hasFail&&pipeHasSignal!=='exec'){pipeHasSignal='fail';pipeSignalAge=0;}
+    else if(hasBuy&&pipeHasSignal!=='exec'){pipeHasSignal='exec';pipeSignalAge=0;}
+    else if(!hasBuy&&!hasReject&&!hasFail){pipeSignalAge++;}
+    if(!hasBuy&&!hasReject&&!hasFail&&pipeSignalAge>60)pipeHasSignal='wait';
+  }
   renderPipeline(pipePulse);
   pipeAnimId=requestAnimationFrame(animatePipeline);
 }
