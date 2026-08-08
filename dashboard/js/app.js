@@ -326,17 +326,16 @@ function renderPipeline(pulse){
   // Event orbs — each travels its own path, holds at the end, then fades out.
   if(t!==undefined){
     var ORB_SPEED=0.06,HOLD_FRAMES=90,FADE_FRAMES=30; // ~2.2s travel, 1.5s hold, 0.5s fade
-    var isWait=orb.path==='wait';
-    if(isWait)HOLD_FRAMES=30; // wait orbs mark "no trigger" — fade out quickly
     for(var oi=0;oi<pipeOrbs.length;oi++){
       var orb=pipeOrbs[oi],edges=pipeEdges(orb.path),segCount=edges.length,alpha=1;
+      var HOLD=orb.path==='wait'?30:HOLD_FRAMES; // wait orbs mark "no trigger" — fade out quickly
       if(!orb.done){
         orb.t+=ORB_SPEED;
         if(orb.t>=segCount*2){orb.done=true;orb.doneAge=0;orb.t=segCount*2-0.001;}
       }else{
         orb.doneAge++;
-        if(orb.doneAge>HOLD_FRAMES)alpha=Math.max(0,1-(orb.doneAge-HOLD_FRAMES)/FADE_FRAMES);
-        if(orb.doneAge>HOLD_FRAMES+FADE_FRAMES){pipeOrbs.splice(oi,1);oi--;continue;}
+        if(orb.doneAge>HOLD)alpha=Math.max(0,1-(orb.doneAge-HOLD)/FADE_FRAMES);
+        if(orb.doneAge>HOLD+FADE_FRAMES){pipeOrbs.splice(oi,1);oi--;continue;}
       }
       var segIdx=Math.floor((orb.t%(segCount*2))/2);
       var segProg=((orb.t%(segCount*2))%2)/2;
