@@ -217,6 +217,21 @@ def fetch_json(url):
             return json.loads(r.read().decode())
     except: return None
 
+# 24hr ticker is weight 40 per call — cache it too (1s polls would otherwise
+# blow the 1200 weight/min limit: 40*60 = 2400).
+_ticker24_cache = None
+_ticker24_ts = 0.0
+def fetch_ticker24_cached(ttl=60):
+    global _ticker24_cache, _ticker24_ts
+    now = time.time()
+    if _ticker24_cache is not None and now - _ticker24_ts < ttl:
+        return _ticker24_cache
+    data = fetch_json(f"{BINANCE_BASE}/api/v3/ticker/24hr")
+    if data is not None:
+        _ticker24_cache = data
+        _ticker24_ts = now
+    return data
+
 # Cache klines so fast polls don't hammer the rate limit (indicators refresh slowly)
 _klines_cache = {}
 _klines_cache_ts = {}
@@ -395,7 +410,7 @@ def portfolio_stats(initial_capital=INITIAL_CAPITAL):
 # MAIN DATA FETCH
 # ============================================================
 def fetch_all_data():
-    tickers_raw = fetch_json(f"{BINANCE_BASE}/api/v3/ticker/24hr")
+    tickers_raw = fetch_ticker24_cached()
     if not tickers_raw: return None
 
     price_map = {}
