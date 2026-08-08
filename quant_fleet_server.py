@@ -451,12 +451,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             db_conn.execute("DELETE FROM watchlist WHERE symbol=?", (sym,))
             db_conn.commit(); reload_symbols()
             self._json(200, {"status":"deleted","symbol":sym})
-        elif self.path.startswith("/i18n/"):
-            fname = self.path.replace("/i18n/", "")
+        elif self.path.startswith("/dashboard/i18n/") or self.path.startswith("/i18n/"):
+            fname = self.path.replace("/dashboard/i18n/", "").replace("/i18n/", "")
             path = os.path.join(_BASE, "dashboard", "i18n", fname)
             if os.path.isfile(path):
                 with open(path, "rb") as f: content = f.read()
                 self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
+            else: self.send_error(404)
+        elif self.path.startswith("/dashboard/"):
+            fpath = os.path.join(_BASE, self.path.lstrip("/"))
+            if os.path.isfile(fpath):
+                ct = "text/css" if fpath.endswith(".css") else "application/javascript" if fpath.endswith(".js") else "text/plain"
+                with open(fpath, "rb") as f: content = f.read()
+                self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
             else: self.send_error(404)
         elif self.path in ("/","/index.html"):
             try:

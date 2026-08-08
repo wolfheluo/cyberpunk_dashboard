@@ -1,0 +1,55 @@
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090C;color:#c0c8d8;font-family:"JetBrains Mono","Fira Code","Share Tech Mono",monospace;overflow:hidden}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1E222D;border-radius:2px}
+.glow-cyan{text-shadow:0 0 6px #00E5FF40,0 0 1px #00E5FF}
+.glow-green{text-shadow:0 0 6px #00FF6640,0 0 1px #00FF66}
+.dot-cyan{display:inline-block;width:6px;height:6px;border-radius:50%;background:#00E5FF;box-shadow:0 0 8px #00E5FF;margin-right:6px;animation:pulse 2s infinite}
+.dot-green{display:inline-block;width:6px;height:6px;border-radius:50%;background:#00FF66;box-shadow:0 0 8px #00FF66;margin-right:6px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.badge-cyan{background:#00E5FF15;color:#00E5FF;border:1px solid #00E5FF30;padding:1px 8px;border-radius:3px;font-size:13px}
+.badge-green{background:#00E5FF15;color:#00E5FF;border:1px solid #00E5FF30;padding:1px 8px;border-radius:3px;font-size:13px}
+.badge-yellow{background:#FFCC0015;color:#FFCC00;border:1px solid #FFCC0030;padding:1px 8px;border-radius:3px;font-size:13px}
+.badge-red{background:#FF2A6D15;color:#FF2A6D;border:1px solid #FF2A6D30;padding:1px 8px;border-radius:3px;font-size:13px}
+.pill-live{background:#00FF6620;color:#00FF66;border:1px solid #00FF6640;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:600;animation:pulse 2s infinite}
+.pill-off{background:#FF2A6D20;color:#FF2A6D;border:1px solid #FF2A6D40;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:600}
+.panel{border:1px solid #1E222D;background:#0F1117}
+.up{color:#00FF66}.down{color:#FF2A6D}.neutral{color:#5A6275}
+.lang-btn{background:#1E222D;color:#5A6275;border:1px solid #1E222D;padding:2px 10px;border-radius:3px;font-size:11px;cursor:pointer;transition:all .2s}
+.lang-btn:hover,.lang-btn.active{border-color:#00E5FF;color:#00E5FF}
+.lang-btn.active{background:#00E5FF15}
+select.strat-select{background:#1E222D;color:#00E5FF;border:1px solid #1E222D;padding:2px 8px;border-radius:3px;font-size:12px;font-family:inherit;cursor:pointer;outline:none;max-width:220px}
+select.strat-select:hover{border-color:#00E5FF}
+select.strat-select option{background:#0F1117;color:#c0c8d8}
+
+/* Sidebar */
+#sidebar{width:200px;transition:width .25s;flex-shrink:0;overflow:hidden;border-right:1px solid #1E222D;background:#0A0C12;display:flex;flex-direction:column}
+#sidebar.collapsed{width:48px}
+.nav-item{padding:10px 14px;cursor:pointer;font-size:13px;color:#5A6275;display:flex;align-items:center;gap:10px;white-space:nowrap;transition:all .15s;border-left:2px solid transparent}
+.nav-item:hover{color:#c0c8d8;background:#0F1117}
+.nav-item.active{color:#00E5FF;border-left-color:#00E5FF;background:#0F1117}
+.nav-item .icon{font-size:16px;min-width:20px;text-align:center}
+#sidebar.collapsed .nav-item{padding:10px 12px}
+#sidebar.collapsed .nav-label{display:none}
+#sidebarToggle{cursor:pointer;padding:8px 14px;color:#5A6275;font-size:16px;user-select:none}
+#sidebarToggle:hover{color:#c0c8d8}
+
+/* Page visibility */
+.page{display:none}
+.page.active{display:flex;flex-direction:column;flex:1;overflow:hidden}
+
+/* Code editor */
+#codeEditor{background:#0A0C12;color:#c0c8d8;border:1px solid #1E222D;font-family:"JetBrains Mono","Fira Code",monospace;font-size:12px;resize:none;outline:none;width:100%}
+#codeEditor:focus{border-color:#00E5FF}
+
+/* Backtest table */
+.bt-table{width:100%;border-collapse:collapse;font-size:12px}
+.bt-table th{text-align:left;padding:6px 10px;border-bottom:1px solid #1E222D;color:#5A6275;font-weight:normal}
+.bt-table td{padding:5px 10px;border-bottom:1px solid #1E222D20}
+.bt-table tr:hover td{background:#0F1117}
+.btn-sm{background:#1E222D;color:#5A6275;border:1px solid #1E222D;padding:3px 10px;border-radius:3px;font-size:11px;font-family:inherit;cursor:pointer;transition:all .15s}
+.btn-sm:hover{border-color:#00E5FF;color:#00E5FF}
+.btn-sm.primary{border-color:#00E5FF;color:#00E5FF;background:#00E5FF10}
+.btn-sm.danger{border-color:#FF2A6D;color:#FF2A6D}
+.btn-sm.danger:hover{background:#FF2A6D15}
