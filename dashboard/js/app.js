@@ -347,15 +347,35 @@ function renderExecLog(){
 // ============================================================
 // FETCH LOOP
 // ============================================================
-var PI=5000;
+var PI=1000;
 function fetchData(){
+  // WebSocket push handles updates; fallback polling
   var start=Date.now();
-  Promise.all([fetch('/api/data').then(function(r){return r.json();}),fetch('/api/positions').then(function(r){return r.json();}),fetch('/api/trades').then(function(r){return r.json();})])
-    .then(function(results){var data=results[0],pos=results[1],trades=results[2],latency=Date.now()-start;
-      for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}DATA.positions=pos.positions||[];DATA.trades=trades.trades||[];DATA.connected=true;DATA.latency_ms=latency;
-      document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
-      if(currentPage==='dashboard')R();setTimeout(fetchData,PI);
-    }).catch(function(err){document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();setTimeout(fetchData,PI);});
+  fetch('/api/data').then(function(r){return r.json();}).then(function(data){
+    applyData(data, Date.now()-start);
+  }).catch(function(err){
+    document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;
+    document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();
+    setTimeout(fetchData,PI);
+  });
+}
+// WebSocket real-time push
+function connectWS(){
+  var ws=new WebSocket('ws://'+location.hostname+':8898');
+  ws.onopen=function(){console.log('[WS] Connected');};
+  ws.onmessage=function(e){
+    try{var data=JSON.parse(e.data);applyData(data,0);}
+    catch(ex){console.log('[WS] Parse error:',ex);}
+  };
+  ws.onclose=function(){console.log('[WS] Disconnected, retry in 3s...');setTimeout(connectWS,3000);};
+  ws.onerror=function(){};
+}
+function applyData(data,latency){
+  for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}
+  DATA.positions=data.positions||[];DATA.trades=data.trades||[];DATA.connected=true;DATA.latency_ms=latency;
+  document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+(latency||'push')+'ms';
+  document.getElementById('statusBar').className='text-[#00FF66]';
+  if(currentPage==='dashboard')R();
 }
 
 // ============================================================
@@ -495,4 +515,4 @@ loadAccount=function(){
 };
 
 R();animateRadarPulse();
-I18n.init().then(function(){loadStrategies();R();fetchData();});
+I18n.init().then(function(){loadStrategies();connectWS();R();});

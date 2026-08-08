@@ -11,6 +11,7 @@ import threading
 from datetime import datetime
 from init_db import init_db, DB_PATH, INITIAL_CAPITAL
 from ws_feed import run_in_thread, get_cached_prices
+from ws_server import run_server
 
 def now_ts(fmt="%H:%M:%S"):
     return datetime.now().strftime(fmt)
@@ -616,6 +617,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 def main():
     port=8899
     ws_count = run_in_thread()
+    run_server(fetch_all_data, 8898)
     print(f"WebSocket feed: {ws_count} symbols streaming")
     print(f"Quant Fleet on http://localhost:{port}")
     print(f"Initial capital: ${INITIAL_CAPITAL:,.0f}")
