@@ -33,107 +33,167 @@ body{background:#08090C;color:#c0c8d8;font-family:"JetBrains Mono","Fira Code","
 </style>
 </head>
 <body class="flex flex-col h-screen">
+
 <header class="flex items-center justify-between px-4 py-2 border-b border-[#1E222D] bg-[#0A0C12] shrink-0">
   <div class="flex items-center gap-6">
-    <span class="text-[#00E5FF] font-bold text-base tracking-wider glow-cyan">QUANT FLEET v2.4</span>
-    <span class="text-[#5A6275] text-sm">// WATCHLIST <span class="text-[#00E5FF]">[<span id="tickerCount">0</span>]</span></span>
+    <span class="text-[#00E5FF] font-bold text-base tracking-wider glow-cyan" data-i18n="app_title">QUANT FLEET v2.4</span>
+    <span class="text-[#5A6275] text-sm"><span data-i18n="watchlist">// WATCHLIST</span> <span class="text-[#00E5FF]">[<span id="tickerCount">0</span>]</span></span>
   </div>
   <div class="flex items-center gap-4 text-sm">
-    <button class="lang-btn active" onclick="switchLang('en')" id="btnEN">EN</button>
-    <button class="lang-btn" onclick="switchLang('zh')" id="btnZH">中文</button>
-    <span class="text-[#5A6275]">LAT <span class="text-[#00E5FF]" id="latency">--</span></span>
+    <button class="lang-btn active" onclick="I18n.setLang('en')" id="btnEN">EN</button>
+    <button class="lang-btn" onclick="I18n.setLang('zh')" id="btnZH">中文</button>
+    <span class="text-[#5A6275]"><span data-i18n="lat">LAT</span> <span class="text-[#00E5FF]" id="latency">--</span></span>
     <span id="statusBar" class="text-[#FFCC00]" style="font-size:11px">Initializing...</span>
-    <span><span id="liveDot" class="dot-cyan"></span><span id="liveStatus" class="text-[#00E5FF]">CONNECTING</span></span>
+    <span><span id="liveDot" class="dot-cyan"></span><span id="liveStatus" class="text-[#00E5FF]" data-i18n="connecting">CONNECTING</span></span>
   </div>
 </header>
+
 <main class="flex flex-1 overflow-hidden">
-  <aside class="w-[23%] border-r border-[#1E222D] overflow-y-auto p-2 space-y-1.5 flex-shrink-0"><div id="tickerRail"></div></aside>
+  <aside class="w-[23%] border-r border-[#1E222D] overflow-y-auto p-2 space-y-1.5 flex-shrink-0">
+    <div id="tickerRail"><div class="text-[#5A6275] text-[13px] p-4" data-i18n="no_data">No data...</div></div>
+  </aside>
+
   <section class="flex-1 flex flex-col overflow-hidden">
     <div class="flex border-b border-[#1E222D]" style="height:42%">
       <div class="w-[55%] border-r border-[#1E222D] p-3 overflow-y-auto">
-        <div class="text-sm text-[#5A6275] mb-2">TICKER  PRICE  SIGNAL  CONF</div>
-        <div class="space-y-0.5 text-sm" id="signalTable"></div>
+        <div class="text-sm text-[#5A6275] mb-2" data-i18n="signal_header">TICKER  PRICE  SIGNAL  CONF</div>
+        <div class="space-y-0.5 text-sm" id="signalTable"><div class="text-[#5A6275] text-[13px]">--</div></div>
       </div>
       <div class="w-[45%] flex flex-col items-center justify-center p-3">
         <canvas id="factorRadar" width="210" height="210"></canvas>
         <div class="grid grid-cols-4 gap-2 mt-2 w-full">
-          <div class="text-center"><div class="text-[#00E5FF] text-base font-bold" id="kpiSharpe">--</div><div class="text-[11px] text-[#5A6275]">SHARPE</div></div>
-          <div class="text-center"><div class="text-[#00FF66] text-base font-bold" id="kpiWin">--</div><div class="text-[11px] text-[#5A6275]">WIN RATE</div></div>
-          <div class="text-center"><div class="text-[#FFCC00] text-base font-bold" id="kpiPnL">--</div><div class="text-[11px] text-[#5A6275]">P&amp;L DAY</div></div>
-          <div class="text-center"><div class="text-[#FF2A6D] text-base font-bold" id="kpiDD">--</div><div class="text-[11px] text-[#5A6275]">MAX DD</div></div>
+          <div class="text-center"><div class="text-[#00E5FF] text-base font-bold" id="kpiSharpe">--</div><div class="text-[11px] text-[#5A6275]" data-i18n="sharpe">SHARPE</div></div>
+          <div class="text-center"><div class="text-[#00FF66] text-base font-bold" id="kpiWin">--</div><div class="text-[11px] text-[#5A6275]" data-i18n="win_rate">WIN RATE</div></div>
+          <div class="text-center"><div class="text-[#FFCC00] text-base font-bold" id="kpiPnL">--</div><div class="text-[11px] text-[#5A6275]" data-i18n="pnl_day">P&amp;L DAY</div></div>
+          <div class="text-center"><div class="text-[#FF2A6D] text-base font-bold" id="kpiDD">--</div><div class="text-[11px] text-[#5A6275]" data-i18n="max_dd">MAX DD</div></div>
         </div>
       </div>
     </div>
     <div class="border-b border-[#1E222D] p-2" style="height:10%">
-      <div class="text-[12px] text-[#5A6275] mb-1">STRATEGY x TIMEFRAME <span class="text-[#00E5FF]">(15m - 1h - 4h - 1d)</span></div>
-      <div class="flex gap-1 h-[28px]" id="strategyMatrix"></div>
+      <div class="text-[12px] text-[#5A6275] mb-1"><span data-i18n="strategy_matrix_title">STRATEGY x TIMEFRAME</span> <span class="text-[#00E5FF]">(15m - 1h - 4h - 1d)</span></div>
+      <div class="flex gap-1 h-[28px]" id="strategyMatrix"><div class="text-[#5A6275] text-[11px] flex items-center" data-i18n="waiting_matrix">Waiting...</div></div>
     </div>
     <div class="border-b border-[#1E222D] p-2" style="height:14%">
-      <div class="text-[12px] text-[#5A6275] mb-1">SIGNAL FLOW — Multi-Timeframe Momentum Strategy</div>
+      <div class="text-[12px] text-[#5A6275] mb-1" data-i18n="signal_flow_title">SIGNAL FLOW</div>
       <canvas id="orderFlowCanvas" width="700" height="46" class="w-full"></canvas>
-      <div class="text-center text-[12px] text-[#00FF66] glow-green mt-0.5" id="executingBanner">[ RUNNING — Binance Live Feed ]</div>
+      <div class="text-center text-[12px] text-[#00FF66] glow-green mt-0.5" id="executingBanner" data-i18n="executing_banner">[ RUNNING ]</div>
     </div>
     <div class="flex flex-1 overflow-hidden">
-      <div class="w-[62%] border-r border-[#1E222D] p-3 overflow-y-auto"><pre class="text-base leading-relaxed" id="strategyCode"></pre></div>
+      <div class="w-[62%] border-r border-[#1E222D] p-3 overflow-y-auto">
+        <pre class="text-base leading-relaxed" id="strategyCode"></pre>
+      </div>
       <div class="w-[38%] p-3 flex flex-col justify-between">
         <div class="space-y-1.5">
-          <div class="flex justify-between text-sm"><span class="text-[#5A6275]">BUY SIGNALS</span> <span class="text-[#00FF66]" id="posLong">--</span></div>
-          <div class="flex justify-between text-sm"><span class="text-[#5A6275]">SELL SIGNALS</span> <span class="text-[#FF2A6D]" id="posShort">--</span></div>
-          <div class="flex justify-between text-sm"><span class="text-[#5A6275]">WAIT</span> <span class="text-[#FFCC00]" id="posFlat">--</span></div>
-          <div class="flex justify-between text-sm"><span class="text-[#5A6275]">HOLD</span> <span class="text-[#5A6275]" id="posPending">--</span></div>
+          <div class="flex justify-between text-sm"><span class="text-[#5A6275]" data-i18n="buy_signals">BUY SIGNALS</span> <span class="text-[#00FF66]" id="posLong">--</span></div>
+          <div class="flex justify-between text-sm"><span class="text-[#5A6275]" data-i18n="sell_signals">SELL SIGNALS</span> <span class="text-[#FF2A6D]" id="posShort">--</span></div>
+          <div class="flex justify-between text-sm"><span class="text-[#5A6275]" data-i18n="wait_signals">WAIT</span> <span class="text-[#FFCC00]" id="posFlat">--</span></div>
+          <div class="flex justify-between text-sm"><span class="text-[#5A6275]" data-i18n="hold_signals">HOLD</span> <span class="text-[#5A6275]" id="posPending">--</span></div>
         </div>
         <div>
           <div class="text-right text-[#00E5FF] text-lg font-bold" id="navTotal">--</div>
-          <div class="text-right text-[12px] text-[#5A6275]">PAPER TRADING</div>
+          <div class="text-right text-[12px] text-[#5A6275]" data-i18n="paper_trading">PAPER TRADING</div>
           <canvas id="posBar" width="160" height="14" class="ml-auto mt-1"></canvas>
         </div>
       </div>
     </div>
   </section>
+
   <aside class="w-[23%] border-l border-[#1E222D] overflow-y-auto p-2 flex-shrink-0">
-    <div class="text-[12px] text-[#00E5FF] mb-2 glow-cyan">// EXECUTION LOG <span class="text-[#00FF66]">[live]</span></div>
-    <div id="execLog" class="text-[12px] leading-relaxed space-y-0.5"><div class="text-[#5A6275] py-px">[ -- ] Awaiting data feed...</div></div>
+    <div class="text-[12px] text-[#00E5FF] mb-2 glow-cyan"><span data-i18n="exec_log_title">// EXECUTION LOG</span> <span class="text-[#00FF66]" data-i18n="live_badge">[live]</span></div>
+    <div id="execLog" class="text-[12px] leading-relaxed space-y-0.5"><div class="text-[#5A6275] py-px" data-i18n="awaiting_feed">[ -- ] Awaiting data feed...</div></div>
   </aside>
 </main>
-<footer class="flex items-center justify-between px-4 py-2 border-t border-[#1E222D] bg-[#0A0C12] shrink-0">
-  <span class="text-[#00E5FF] text-sm"><span class="text-[#5A6275]">&gt;</span> <span id="cliPrompt">fetching Binance: SOL BTC ETH BNB XRP ADA DOGE AVAX DOT LINK MATIC UNI ATOM APT ARB OP</span> <span class="animate-pulse">|</span></span>
-  <span id="tradingPill" class="pill-off">DISCONNECTED</span>
-</footer>
-<script>
-var LANG='en';
-var I18N={
-en:{signal_buy:'BUY',signal_sell:'SELL',signal_hold:'HOLD',signal_wait:'WAIT',
-strategy_code:'<span class="text-[#5A6275]"># Multi-TF Momentum Strategy (Binance Live)</span>\n<span class="text-[#5A6275]"># RSI(14) on 1h + SMA crossover on 4h + Volume confirmation</span>\n\n<span class="text-[#FF2A6D]">class</span> <span class="text-[#FFCC00]">MomentumStrategy</span>:\n    <span class="text-[#5A6275]">"""</span>\n<span class="text-[#5A6275]">    BUY  when: RSI(1h) < 45 AND price > SMA(4h,20) AND vol > 1.2x avg</span>\n<span class="text-[#5A6275]">    SELL when: RSI(1h) > 65 OR price < SMA(4h,20) * 0.98</span>\n<span class="text-[#5A6275]">    Confidence = weighted_score(RSI:45% + SMA:30% + VOL:25%)</span>\n<span class="text-[#5A6275]">    """</span>\n\n    <span class="text-[#FF2A6D]">def</span> <span class="text-[#00E5FF]">evaluate</span>(<span class="text-[#5A6275]">self</span>, ticker):\n        rsi    = ta.rsi(ticker.klines_1h, <span class="text-[#00FF66]">14</span>)\n        sma    = ta.sma(ticker.klines_4h, <span class="text-[#00FF66]">20</span>)\n        vol_ok = ticker.volume > ticker.avg_volume * <span class="text-[#00FF66]">1.2</span>\n\n        score = <span class="text-[#5A6275]">self</span>.weighted_score(rsi, sma, vol_ok)\n        <span class="text-[#FF2A6D]">return</span> score, <span class="text-[#5A6275]">self</span>.to_signal(score)'},
-zh:{signal_buy:'買入',signal_sell:'賣出',signal_hold:'持有',signal_wait:'觀望',
-strategy_code:'<span class="text-[#5A6275]"># 多時間框架動能策略 (Binance 即時)</span>\n<span class="text-[#5A6275]"># RSI(14) 1h + SMA 交叉 4h + 成交量確認</span>\n\n<span class="text-[#FF2A6D]">class</span> <span class="text-[#FFCC00]">MomentumStrategy</span>:\n    <span class="text-[#5A6275]">"""</span>\n<span class="text-[#5A6275]">    BUY  條件: RSI(1h) < 45 AND price > SMA(4h,20) AND vol > 1.2x 均量</span>\n<span class="text-[#5A6275]">    SELL 條件: RSI(1h) > 65 OR price < SMA(4h,20) * 0.98</span>\n<span class="text-[#5A6275]">    信心度 = 加權評分(RSI:45% + SMA:30% + VOL:25%)</span>\n<span class="text-[#5A6275]">    """</span>\n\n    <span class="text-[#FF2A6D]">def</span> <span class="text-[#00E5FF]">evaluate</span>(<span class="text-[#5A6275]">self</span>, ticker):\n        rsi    = ta.rsi(ticker.klines_1h, <span class="text-[#00FF66]">14</span>)\n        sma    = ta.sma(ticker.klines_4h, <span class="text-[#00FF66]">20</span>)\n        vol_ok = ticker.volume > ticker.avg_volume * <span class="text-[#00FF66]">1.2</span>\n\n        score = <span class="text-[#5A6275]">self</span>.weighted_score(rsi, sma, vol_ok)\n        <span class="text-[#FF2A6D]">return</span> score, <span class="text-[#5A6275]">self</span>.to_signal(score)'}
-};
-function t(key){ return (I18N[LANG] && I18N[LANG][key]) || (I18N['en'][key]) || key; }
-function switchLang(lang){
-  LANG=lang;
-  document.getElementById('btnEN').className='lang-btn'+(lang==='en'?' active':'');
-  document.getElementById('btnZH').className='lang-btn'+(lang==='zh'?' active':'');
-  document.getElementById('strategyCode').innerHTML=t('strategy_code');
-  renderAll();
-}
 
+<footer class="flex items-center justify-between px-4 py-2 border-t border-[#1E222D] bg-[#0A0C12] shrink-0">
+  <span class="text-[#00E5FF] text-sm"><span class="text-[#5A6275]">&gt;</span> <span id="cliPrompt" data-i18n="cli_prompt">fetching Binance: ...</span> <span class="animate-pulse">|</span></span>
+  <span id="tradingPill" class="pill-off" data-i18n="disconnected">DISCONNECTED</span>
+</footer>
+
+<script>
+// ============================================================
+// I18n — loads JSON dictionaries, binds [data-i18n] elements
+// ============================================================
+var I18n = (function(){
+  var _lang = 'en';
+  var _dicts = {};
+  var _ready = false;
+  var _onReady = [];
+
+  function _load(lang){
+    return fetch('/i18n/'+lang+'.json')
+      .then(function(r){return r.json();})
+      .then(function(d){_dicts[lang]=d;return d;});
+  }
+
+  function _t(key, params){
+    var d = _dicts[_lang] || _dicts['en'] || {};
+    var s = d[key] || (_dicts['en']&&_dicts['en'][key]) || key;
+    if(params){for(var k in params){s=s.split('{'+k+'}').join(params[k]);}}
+    return s;
+  }
+
+  function _bindAll(){
+    var els = document.querySelectorAll('[data-i18n]');
+    for(var i=0;i<els.length;i++){
+      var el=els[i], key=el.getAttribute('data-i18n');
+      if(key) el.textContent = _t(key);
+    }
+    // Strategy code (multiline)
+    var codeEl = document.getElementById('strategyCode');
+    if(codeEl) codeEl.textContent = _t('strategy_code');
+    // cliPrompt
+    var cli = document.getElementById('cliPrompt');
+    if(cli) cli.textContent = _t('cli_prompt');
+  }
+
+  function init(){
+    return Promise.all([_load('en'),_load('zh')]).then(function(){
+      _ready=true;_bindAll();
+      _onReady.forEach(function(fn){fn();});
+      _onReady=[];
+    });
+  }
+
+  return {
+    init: init,
+    t: _t,
+    setLang: function(lang){
+      _lang=lang;
+      document.getElementById('btnEN').className='lang-btn'+(lang==='en'?' active':'');
+      document.getElementById('btnZH').className='lang-btn'+(lang==='zh'?' active':'');
+      _bindAll();
+      if(typeof renderAll==='function') renderAll();
+    },
+    getLang: function(){return _lang;},
+    ready: function(fn){if(_ready)fn();else _onReady.push(fn);}
+  };
+})();
+
+// ============================================================
+// DATA STORE
+// ============================================================
 var DATA={connected:false,latency_ms:null,tickers:[],strategy_matrix:{strategies:[],timeframes:[],cells:[]},kpi:{},factors:[],order_flow:{},exec_log:[]};
 
+// ============================================================
+// RENDER
+// ============================================================
 function renderAll(){renderConnection();renderTickerRail();renderSignalTable();renderRadar();renderKPIs();renderStrategyMatrix();renderOrderFlow();renderPositions();renderExecLog();}
 
 function renderConnection(){
   document.getElementById('latency').innerHTML=DATA.connected&&DATA.latency_ms!=null?DATA.latency_ms+'ms':'--';
   var dot=document.getElementById('liveDot'),st=document.getElementById('liveStatus');
-  if(DATA.connected){dot.className='dot-green';st.className='text-[#00FF66]';st.innerHTML='LIVE';}
-  else{dot.className='dot-cyan';st.className='text-[#00E5FF]';st.innerHTML='CONNECTING';}
+  if(DATA.connected){dot.className='dot-green';st.className='text-[#00FF66]';st.setAttribute('data-i18n','live');st.textContent=I18n.t('live');}
+  else{dot.className='dot-cyan';st.className='text-[#00E5FF]';st.setAttribute('data-i18n','connecting');st.textContent=I18n.t('connecting');}
   var pill=document.getElementById('tradingPill');
   pill.className=DATA.connected?'pill-live':'pill-off';
-  pill.innerHTML=DATA.connected?'LIVE TRADING':'DISCONNECTED';
+  pill.setAttribute('data-i18n',DATA.connected?'live_trading':'disconnected');
+  pill.textContent=I18n.t(DATA.connected?'live_trading':'disconnected');
 }
 
 function renderTickerRail(){
   var rail=document.getElementById('tickerRail');rail.innerHTML='';
   document.getElementById('tickerCount').textContent=DATA.tickers.length;
-  if(!DATA.tickers.length){rail.innerHTML='<div class="text-[#5A6275] text-[13px] p-4">No data...</div>';return;}
+  if(!DATA.tickers.length){rail.innerHTML='<div class="text-[#5A6275] text-[13px] p-4">'+I18n.t('no_data')+'</div>';return;}
   DATA.tickers.forEach(function(tk,i){
     var chg=parseFloat(tk.change_pct)||0,sign=chg>=0?'+':'',colorClass=chg>0?'up':chg<0?'down':'neutral';
     var card=document.createElement('div');
@@ -142,7 +202,7 @@ function renderTickerRail(){
       '<div class="flex justify-between items-center mb-1">'+
         '<div><span class="text-[#00E5FF] text-[13px] font-bold">'+tk.id+'</span>'+
         '<span class="text-[#5A6275] text-[11px] ml-1.5">'+(tk.name||'')+'</span></div>'+
-        '<span class="text-[#5A6275] text-[12px]">Vol '+(tk.volume_m!=null?Number(tk.volume_m).toFixed(1)+'M':'--')+'</span>'+
+        '<span class="text-[#5A6275] text-[12px]">'+I18n.t('vol')+' '+(tk.volume_m!=null?Number(tk.volume_m).toFixed(1)+'M':'--')+'</span>'+
       '</div>'+
       '<canvas class="w-full sparkline" height="20" data-idx="'+i+'" style="width:100%"></canvas>'+
       '<div class="flex justify-between mt-0.5">'+
@@ -176,7 +236,8 @@ function renderSignalTable(){
   var st=document.getElementById('signalTable');st.innerHTML='';
   if(!DATA.tickers.length){st.innerHTML='<div class="text-[#5A6275] text-[13px]">--</div>';return;}
   DATA.tickers.forEach(function(tk){
-    var sigText=tk.signal?t('signal_'+tk.signal.toLowerCase()):'--';
+    var sigKey='signal_'+((tk.signal||'wait').toLowerCase());
+    var sigText=I18n.t(sigKey);
     var b=tk.signal==='BUY'?'badge-green':tk.signal==='SELL'?'badge-red':tk.signal==='WAIT'?'badge-yellow':'badge-cyan';
     var chg=parseFloat(tk.change_pct)||0,ps=chg>0?'up':chg<0?'down':'neutral';
     st.innerHTML+='<div class="flex items-center gap-3 py-0.5 border-b border-[#1E222D40]">'+
@@ -190,7 +251,7 @@ function renderSignalTable(){
 function renderRadar(){
   var radar=document.getElementById('factorRadar'),rctx=radar.getContext('2d');
   var cx=105,cy=105,rr=85;rctx.clearRect(0,0,210,210);
-  if(!DATA.factors.length){rctx.fillStyle='#5A6275';rctx.font='11px monospace';rctx.textAlign='center';rctx.fillText('Loading factors...',cx,cy);rctx.textAlign='start';return;}
+  if(!DATA.factors.length){rctx.fillStyle='#5A6275';rctx.font='11px monospace';rctx.textAlign='center';rctx.fillText(I18n.t('loading_factors'),cx,cy);rctx.textAlign='start';return;}
   var nf=DATA.factors.length;
   for(var i=1;i<=4;i++){rctx.beginPath();rctx.arc(cx,cy,rr*i/4,0,Math.PI*2);rctx.strokeStyle='#1E222D';rctx.lineWidth=0.5;rctx.stroke();}
   var pts=[];
@@ -198,8 +259,7 @@ function renderRadar(){
     var a=(i/nf)*Math.PI*2-Math.PI/2,dist=rr*(DATA.factors[i].value||0);
     pts.push({x:cx+Math.cos(a)*dist,y:cy+Math.sin(a)*dist});
     rctx.beginPath();rctx.moveTo(cx,cy);rctx.lineTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr);rctx.strokeStyle='#1E222D50';rctx.lineWidth=0.3;rctx.stroke();
-    rctx.fillStyle='#5A6275';rctx.font='9px monospace';rctx.textAlign='center';
-    rctx.fillText(DATA.factors[i].label,cx+Math.cos(a)*(rr+14),cy+Math.sin(a)*(rr+14)+3);
+    rctx.fillStyle='#5A6275';rctx.font='9px monospace';rctx.textAlign='center';rctx.fillText(DATA.factors[i].label,cx+Math.cos(a)*(rr+14),cy+Math.sin(a)*(rr+14)+3);
   }
   rctx.beginPath();for(i=0;i<nf;i++)i===0?rctx.moveTo(pts[i].x,pts[i].y):rctx.lineTo(pts[i].x,pts[i].y);
   rctx.closePath();rctx.fillStyle='rgba(0,229,255,0.08)';rctx.fill();rctx.strokeStyle='#00E5FF';rctx.lineWidth=1.2;rctx.stroke();
@@ -219,7 +279,7 @@ function renderKPIs(){
 function renderStrategyMatrix(){
   var mx=document.getElementById('strategyMatrix');mx.innerHTML='';
   var sm=DATA.strategy_matrix;
-  if(!sm.strategies.length||!sm.timeframes.length){mx.innerHTML='<div class="text-[#5A6275] text-[11px] flex items-center">Waiting...</div>';return;}
+  if(!sm.strategies.length||!sm.timeframes.length){mx.innerHTML='<div class="text-[#5A6275] text-[11px] flex items-center">'+I18n.t('waiting_matrix')+'</div>';return;}
   for(var w=0;w<sm.strategies.length;w++){
     var col=document.createElement('div');col.className='flex flex-col gap-px flex-1';
     for(var p=0;p<sm.timeframes.length;p++){
@@ -264,11 +324,14 @@ function renderPositions(){
 
 function renderExecLog(){
   var el=document.getElementById('execLog');el.innerHTML='';
-  if(!DATA.exec_log.length){el.innerHTML='<div class="text-[#5A6275] py-px">[ -- ] Awaiting data feed...</div>';return;}
+  if(!DATA.exec_log.length){el.innerHTML='<div class="text-[#5A6275] py-px">'+I18n.t('awaiting_feed')+'</div>';return;}
   for(var i=Math.max(0,DATA.exec_log.length-50);i<DATA.exec_log.length;i++){var e=DATA.exec_log[i];var div=document.createElement('div');div.className='py-px';div.innerHTML=e.html||e.ts+' '+e.type;el.appendChild(div);}
   el.parentElement.scrollTop=el.parentElement.scrollHeight;
 }
 
+// ============================================================
+// FETCH LOOP
+// ============================================================
 var POLL_INTERVAL=5000;
 function fetchData(){
   var start=Date.now();
@@ -276,21 +339,26 @@ function fetchData(){
     var latency=Date.now()-start;
     for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}
     DATA.connected=true;DATA.latency_ms=latency;
-    document.getElementById('statusBar').textContent='Updated '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';
+    document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';
     document.getElementById('statusBar').className='text-[#00FF66]';
     renderAll();
     setTimeout(fetchData,POLL_INTERVAL);
   }).catch(function(err){
-    document.getElementById('statusBar').textContent='API: '+err.message;
+    document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;
     document.getElementById('statusBar').className='text-[#FF2A6D]';
     DATA.connected=false;renderConnection();
     setTimeout(fetchData,POLL_INTERVAL);
   });
 }
 
-document.getElementById('strategyCode').innerHTML=t('strategy_code');
+// ============================================================
+// BOOT: load i18n → render shell → start polling
+// ============================================================
 renderAll();
-fetchData();
+I18n.init().then(function(){
+  renderAll();  // re-render with translated text
+  fetchData();  // start data polling
+});
 </script>
 </body>
 </html>
