@@ -202,7 +202,10 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
     <div id="page-account" class="page">
       <div class="flex flex-1 overflow-hidden">
         <div class="w-[55%] overflow-y-auto p-3 border-r border-[#1E222D]">
-          <div class="text-sm text-[#00E5FF] mb-3" data-i18n="portfolio_summary">PORTFOLIO SUMMARY</div>
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-sm text-[#00E5FF]" data-i18n="portfolio_summary">PORTFOLIO SUMMARY</span>
+            <button class="btn-sm danger" onclick="resetAccount()">↺ RESET</button>
+          </div>
           <div class="flex items-center gap-3 mb-3">
             <span class="text-[12px] text-[#5A6275]" data-i18n="active_strategy_label">Active Strategy:</span>
             <select class="strat-select" id="acctStrategySelect" onchange="activateStrategy(this.value)" style="max-width:250px">
