@@ -39,11 +39,11 @@ tailwind.config = {
   .dot-cyan{display:inline-block;width:6px;height:6px;border-radius:50%;background:#00E5FF;box-shadow:0 0 8px #00E5FF;margin-right:6px;animation:pulse 2s infinite}
   .dot-green{display:inline-block;width:6px;height:6px;border-radius:50%;background:#00FF66;box-shadow:0 0 8px #00FF66;margin-right:6px;animation:pulse 2s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-  .badge-cyan{background:#00E5FF15;color:#00E5FF;border:1px solid #00E5FF30;padding:1px 8px;border-radius:3px;font-size:11px}
-  .badge-green{background:#00FF6615;color:#00FF66;border:1px solid #00FF6630;padding:1px 8px;border-radius:3px;font-size:11px}
-  .badge-yellow{background:#FFCC0015;color:#FFCC00;border:1px solid #FFCC0030;padding:1px 8px;border-radius:3px;font-size:11px}
-  .badge-red{background:#FF2A6D15;color:#FF2A6D;border:1px solid #FF2A6D30;padding:1px 8px;border-radius:3px;font-size:11px}
-  .pill-live{background:#00FF6620;color:#00FF66;border:1px solid #00FF6640;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:600;animation:pulse 2s infinite}
+  .badge-cyan{background:#00E5FF15;color:#00E5FF;border:1px solid #00E5FF30;padding:1px 8px;border-radius:3px;font-size:13px}
+  .badge-green{background:#00FF6615;color:#00FF66;border:1px solid #00FF6630;padding:1px 8px;border-radius:3px;font-size:13px}
+  .badge-yellow{background:#FFCC0015;color:#FFCC00;border:1px solid #FFCC0030;padding:1px 8px;border-radius:3px;font-size:13px}
+  .badge-red{background:#FF2A6D15;color:#FF2A6D;border:1px solid #FF2A6D30;padding:1px 8px;border-radius:3px;font-size:13px}
+  .pill-live{background:#00FF6620;color:#00FF66;border:1px solid #00FF6640;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:600;animation:pulse 2s infinite}
   .panel{border:1px solid #1E222D;background:#0F1117}
   .up{color:#00FF66}
   .down{color:#FF2A6D}
@@ -55,9 +55,9 @@ tailwind.config = {
 <header class="flex items-center justify-between px-4 py-2 border-b border-[#1E222D] bg-[#0A0C12] shrink-0">
   <div class="flex items-center gap-6">
     <span class="text-[#00E5FF] font-bold text-sm tracking-wider glow-cyan">QUANT FLEET v2.4</span>
-    <span class="text-[#5A6275] text-xs">// WATCHLIST <span class="text-[#00E5FF]">[16]</span></span>
+    <span class="text-[#5A6275] text-sm">// WATCHLIST <span class="text-[#00E5FF]">[16]</span></span>
   </div>
-  <div class="flex items-center gap-5 text-xs">
+  <div class="flex items-center gap-5 text-sm">
     <span class="text-[#5A6275]">LAT <span class="text-[#00E5FF]">2.1ms</span></span>
     <span class="text-[#5A6275]">MKT <span id="mktStatus" class="text-[#00FF66]">OPEN</span></span>
     <span><span class="dot-green"></span><span class="text-[#00FF66]">LIVE</span></span>
@@ -79,39 +79,39 @@ tailwind.config = {
     <div class="flex border-b border-[#1E222D]" style="height:42%">
       <!-- Signal Table -->
       <div class="w-[55%] border-r border-[#1E222D] p-3 overflow-y-auto">
-        <div class="text-xs text-[#5A6275] mb-2">TICKER  PRICE  SIGNAL  CONF</div>
-        <div class="space-y-0.5 text-xs" id="signalTable"></div>
+        <div class="text-sm text-[#5A6275] mb-2">TICKER  PRICE  SIGNAL  CONF</div>
+        <div class="space-y-0.5 text-sm" id="signalTable"></div>
       </div>
       <!-- Radar + KPIs -->
       <div class="w-[45%] flex flex-col items-center justify-center p-3">
         <canvas id="factorRadar" width="210" height="210"></canvas>
         <div class="grid grid-cols-4 gap-2 mt-2 w-full">
-          <div class="text-center"><div class="text-[#00E5FF] text-sm font-bold" id="kpiSharpe">2.41</div><div class="text-[9px] text-[#5A6275]">SHARPE</div></div>
-          <div class="text-center"><div class="text-[#00FF66] text-sm font-bold" id="kpiWin">68.3%</div><div class="text-[9px] text-[#5A6275]">WIN RATE</div></div>
-          <div class="text-center"><div class="text-[#FFCC00] text-sm font-bold" id="kpiPnL">+$42.8K</div><div class="text-[9px] text-[#5A6275]">P&amp;L DAY</div></div>
-          <div class="text-center"><div class="text-[#FF2A6D] text-sm font-bold" id="kpiDD">-4.2%</div><div class="text-[9px] text-[#5A6275]">MAX DD</div></div>
+          <div class="text-center"><div class="text-[#00E5FF] text-base font-bold" id="kpiSharpe">2.41</div><div class="text-[13px] text-[#5A6275]">SHARPE</div></div>
+          <div class="text-center"><div class="text-[#00FF66] text-base font-bold" id="kpiWin">68.3%</div><div class="text-[13px] text-[#5A6275]">WIN RATE</div></div>
+          <div class="text-center"><div class="text-[#FFCC00] text-base font-bold" id="kpiPnL">+$42.8K</div><div class="text-[13px] text-[#5A6275]">P&amp;L DAY</div></div>
+          <div class="text-center"><div class="text-[#FF2A6D] text-base font-bold" id="kpiDD">-4.2%</div><div class="text-[13px] text-[#5A6275]">MAX DD</div></div>
         </div>
       </div>
     </div>
 
     <!-- Panel B: Strategy Matrix -->
     <div class="border-b border-[#1E222D] p-2" style="height:10%">
-      <div class="text-[10px] text-[#5A6275] mb-1">STRATEGY x TIMEFRAME <span class="text-[#00E5FF]">(1m - 5m - 15m - 1h - 4h - 1d)</span></div>
+      <div class="text-[14px] text-[#5A6275] mb-1">STRATEGY x TIMEFRAME <span class="text-[#00E5FF]">(1m - 5m - 15m - 1h - 4h - 1d)</span></div>
       <div class="flex gap-1 h-[28px]" id="strategyMatrix"></div>
     </div>
 
     <!-- Panel C: Order Flow -->
     <div class="border-b border-[#1E222D] p-2" style="height:14%">
-      <div class="text-[10px] text-[#5A6275] mb-1">ORDER ROUTING -- smart router to minimize slippage across venues</div>
+      <div class="text-[14px] text-[#5A6275] mb-1">ORDER ROUTING -- smart router to minimize slippage across venues</div>
       <canvas id="orderFlowCanvas" width="700" height="46" class="w-full"></canvas>
-      <div class="text-center text-[10px] text-[#00FF66] glow-green mt-0.5">[ EXECUTING -- monitoring 6 venues ]</div>
+      <div class="text-center text-[14px] text-[#00FF66] glow-green mt-0.5">[ EXECUTING -- monitoring 6 venues ]</div>
     </div>
 
     <!-- Panel D+E: Strategy Engine + Positions -->
     <div class="flex flex-1 overflow-hidden">
       <!-- Strategy Engine -->
       <div class="w-[62%] border-r border-[#1E222D] p-3 overflow-y-auto">
-        <pre class="text-xs leading-relaxed"><span class="text-[#5A6275]"># Strategy Engine: multi-factor momentum + mean reversion</span>
+        <pre class="text-base leading-relaxed"><span class="text-[#5A6275]"># Strategy Engine: multi-factor momentum + mean reversion</span>
 <span class="text-[#FF2A6D]">class</span> <span class="text-[#FFCC00]">AlphaFleet</span>:
     <span class="text-[#FF2A6D]">def</span> <span class="text-[#00E5FF]">__init__</span>(<span class="text-[#5A6275]">self</span>):
         <span class="text-[#5A6275]">self</span>.factors = [<span class="text-[#00FF66]">RSI</span>, <span class="text-[#00FF66]">MACD</span>, <span class="text-[#00FF66]">VOL_SURGE</span>, <span class="text-[#00FF66]">VWAP_DEV</span>]
@@ -130,15 +130,15 @@ tailwind.config = {
       <!-- Positions -->
       <div class="w-[38%] p-3 flex flex-col justify-between">
         <div class="space-y-1.5">
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">LONG</span> <span class="text-[#00FF66]">12</span> <span class="text-[#5A6275]">+$31.2K</span></div>
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">SHORT</span> <span class="text-[#FF2A6D]">3</span> <span class="text-[#5A6275]">-$2.8K</span></div>
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">FLAT/MONITOR</span> <span class="text-[#5A6275]">28</span></div>
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">PENDING</span> <span class="text-[#FFCC00]">4</span></div>
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">REJECTED</span> <span class="text-[#FF2A6D]">2</span></div>
+          <div class="flex justify-between text-sm"><span class="text-[#5A6275]">LONG</span> <span class="text-[#00FF66]">12</span> <span class="text-[#5A6275]">+$31.2K</span></div>
+          <div class="flex justify-between text-sm"><span class="text-[#5A6275]">SHORT</span> <span class="text-[#FF2A6D]">3</span> <span class="text-[#5A6275]">-$2.8K</span></div>
+          <div class="flex justify-between text-sm"><span class="text-[#5A6275]">FLAT/MONITOR</span> <span class="text-[#5A6275]">28</span></div>
+          <div class="flex justify-between text-sm"><span class="text-[#5A6275]">PENDING</span> <span class="text-[#FFCC00]">4</span></div>
+          <div class="flex justify-between text-sm"><span class="text-[#5A6275]">REJECTED</span> <span class="text-[#FF2A6D]">2</span></div>
         </div>
         <div>
           <div class="text-right text-[#00E5FF] text-lg font-bold" id="navTotal">$1,847,203</div>
-          <div class="text-right text-[10px] text-[#5A6275]">AUM (NET)</div>
+          <div class="text-right text-[14px] text-[#5A6275]">AUM (NET)</div>
           <canvas id="posBar" width="160" height="14" class="ml-auto mt-1"></canvas>
         </div>
       </div>
@@ -147,15 +147,15 @@ tailwind.config = {
 
   <!-- ===== RIGHT: EXECUTION LOG ===== -->
   <aside class="w-[23%] border-l border-[#1E222D] overflow-y-auto p-2 flex-shrink-0">
-    <div class="text-[10px] text-[#00E5FF] mb-2 glow-cyan">// EXECUTION LOG <span class="text-[#00FF66]">[live]</span></div>
-    <div id="execLog" class="text-[10px] leading-relaxed space-y-0.5"></div>
+    <div class="text-[14px] text-[#00E5FF] mb-2 glow-cyan">// EXECUTION LOG <span class="text-[#00FF66]">[live]</span></div>
+    <div id="execLog" class="text-[14px] leading-relaxed space-y-0.5"></div>
   </aside>
 
 </main>
 
 <!-- ===== BOTTOM BAR ===== -->
 <footer class="flex items-center justify-between px-4 py-2 border-t border-[#1E222D] bg-[#0A0C12] shrink-0">
-  <span class="text-[#00E5FF] text-xs"><span class="text-[#5A6275]">&gt;</span> scan TSLA AAPL NVDA for RSI divergence + volume surge on 15m <span class="animate-pulse">|</span></span>
+  <span class="text-[#00E5FF] text-sm"><span class="text-[#5A6275]">&gt;</span> scan TSLA AAPL NVDA for RSI divergence + volume surge on 15m <span class="animate-pulse">|</span></span>
   <span class="pill-live">LIVE TRADING</span>
 </footer>
 
@@ -192,14 +192,14 @@ tickers.forEach(function(t,i){
   card.className='panel p-2 cursor-pointer hover:border-[#00E5FF40] transition-colors';
   card.innerHTML=
     '<div class="flex justify-between items-center mb-1">'+
-      '<div><span class="text-[#00E5FF] text-[11px] font-bold">'+t.id+'</span>'+
-      '<span class="text-[#5A6275] text-[9px] ml-1.5">'+t.name+'</span></div>'+
-      '<span class="text-[#5A6275] text-[10px]">Vol '+t.volume+'M</span>'+
+      '<div><span class="text-[#00E5FF] text-[13px] font-bold">'+t.id+'</span>'+
+      '<span class="text-[#5A6275] text-[13px] ml-1.5">'+t.name+'</span></div>'+
+      '<span class="text-[#5A6275] text-[14px]">Vol '+t.volume+'M</span>'+
     '</div>'+
     '<canvas class="w-full" height="20" data-ticker="'+t.id+'" style="width:100%"></canvas>'+
     '<div class="flex justify-between mt-0.5">'+
-      '<span class="text-[12px]">$'+t.price.toFixed(2)+'</span>'+
-      '<span class="'+colorClass+' text-[10px]">'+sign+t.change+' ('+sign+t.changePct+'%)</span>'+
+      '<span class="text-[14px]">$'+t.price.toFixed(2)+'</span>'+
+      '<span class="'+colorClass+' text-[14px]">'+sign+t.change+' ('+sign+t.changePct+'%)</span>'+
     '</div>';
   rail.appendChild(card);
 });
@@ -236,7 +236,7 @@ tickers.forEach(function(t){
     '<span class="text-[#00E5FF] w-12">'+t.id+'</span>'+
     '<span class="'+ps+' w-20 text-right">$'+t.price.toFixed(2)+'</span>'+
     '<span class="'+b+'">'+t.signal+'</span>'+
-    '<span class="text-[#5A6275] text-[10px] ml-auto">'+t.confidence+'%</span></div>';
+    '<span class="text-[#5A6275] text-[14px] ml-auto">'+t.confidence+'%</span></div>';
 });
 
 // ---- FACTOR RADAR ----
@@ -268,7 +268,7 @@ function drawRadar(pulse){
     rctx.strokeStyle='#1E222D50';rctx.lineWidth=0.3;rctx.stroke();
     // label
     var lx=cx+Math.cos(a)*(rr+14),ly=cy+Math.sin(a)*(rr+14)+3;
-    rctx.fillStyle='#5A6275';rctx.font='7px monospace';rctx.textAlign='center';
+    rctx.fillStyle='#5A6275';rctx.font='9px monospace';rctx.textAlign='center';
     rctx.fillText(factors[i].label,lx,ly);
   }
   // Data polygon
@@ -340,7 +340,7 @@ for(var e=0;e<oedges.length;e++){
   octx.beginPath();octx.moveTo(onodes[ed[0]].x+8,onodes[ed[0]].y);
   octx.lineTo(onodes[ed[1]].x-8,onodes[ed[1]].y);
   octx.strokeStyle=ed[3];octx.stroke();
-  if(ed[2]){octx.fillStyle=ed[3].replace('80','');octx.font='6px monospace';octx.fillText(ed[2],(onodes[ed[0]].x+onodes[ed[1]].x)/2-10,onodes[ed[0]].y-3);}
+  if(ed[2]){octx.fillStyle=ed[3].replace('80','');octx.font='8px monospace';octx.fillText(ed[2],(onodes[ed[0]].x+onodes[ed[1]].x)/2-10,onodes[ed[0]].y-3);}
 }
 // Draw node circles
 for(var n=0;n<onodes.length;n++){
@@ -348,7 +348,7 @@ for(var n=0;n<onodes.length;n++){
   octx.beginPath();octx.arc(nd.x,nd.y,r,0,Math.PI*2);
   octx.fillStyle=nd.color;octx.fill();
   if(nd.color==='#00FF66'||nd.color==='#00E5FF'){octx.shadowColor=nd.color;octx.shadowBlur=5;octx.fill();octx.shadowBlur=0;}
-  octx.fillStyle='#5A6275';octx.font='7px monospace';
+  octx.fillStyle='#5A6275';octx.font='9px monospace';
   octx.fillText(nd.label,nd.label==='ROUTER'?nd.x-18:nd.x-10,nd.y+(nd.label==='ROUTER'?18:12));
 }
 
