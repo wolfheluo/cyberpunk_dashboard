@@ -88,7 +88,18 @@ function saveStrategy(){
     .then(function(r){return r.json();}).then(function(d){
       document.getElementById('editorStatus').textContent=d.error?'ERROR: '+d.error:'Saved — '+d.name;
       document.getElementById('editorStatus').style.color=d.error?'#FF2A6D':'#00FF66';
-      if(!d.error)loadStrategies();
+      if(!d.error){
+        loadStrategies();
+        // Hot-reload: re-eval all tickers with new strategy
+        if(editingFile===activeStratFile){
+          eval('activeJSStrategy='+code.replace(/\\n/g,'\\n'));
+          for(var i=0;i<DATA.tickers.length;i++){
+            var s=evaluateJSStrategy(DATA.tickers[i]);
+            DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;
+          }
+          if(currentPage==='dashboard')R();
+        }
+      }
     });
 }
 
