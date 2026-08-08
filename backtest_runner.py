@@ -5,7 +5,7 @@ import os, sys, csv, io, zipfile, urllib.request, time, sqlite3
 from datetime import datetime
 
 BINANCE_VISION = "https://data.binance.vision/data/spot/monthly/klines"
-SYMBOLS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","ADAUSDT","HYPEUSDT","LINKUSDT"]
+SYMBOLS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","ADAUSDT","HYPERUSDT","LINKUSDT"]
 START = (2025, 1)
 END = (2026, 6)
 INTERVAL = "1d"

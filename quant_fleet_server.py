@@ -19,8 +19,8 @@ def now_ts(fmt="%H:%M:%S"):
 # ============================================================
 # CONFIG
 # ============================================================
-SYMBOLS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","ADAUSDT","HYPEUSDT","LINKUSDT"]
-SYMBOL_NAMES = {"BTC":"Bitcoin","ETH":"Ethereum","BNB":"BNB","SOL":"Solana","ADA":"Cardano","HYPE":"Hyperliquid","LINK":"Chainlink"}
+SYMBOLS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","ADAUSDT","HYPERUSDT","LINKUSDT"]
+SYMBOL_NAMES = {"BTC":"Bitcoin","ETH":"Ethereum","BNB":"BNB","SOL":"Solana","ADA":"Cardano","HYPER":"Hyperliquid","LINK":"Chainlink"}
 BINANCE_BASE = "https://api.binance.com"
 DB_PATH = "/root/quant_fleet.db"
 STRATEGIES_DIR = "/root/strategies"
