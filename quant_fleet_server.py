@@ -588,13 +588,22 @@ def fetch_all_data():
         #              (no event → orb takes the WAIT path), not a rejection.
         #   failed   → fail orb (→FAIL): trade could not be written to DB
         current_pos = positions_map.get(sym)
+        want_add = bool(sig.get("add"))
         trade_result = None
         if signal == "BUY":
-            if (current_pos and current_pos["side"] == "SELL") or (not current_pos):
-                trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)
+            if current_pos and current_pos["side"] == "BUY" and not want_add:
+                pass  # repeated signal on a long — no-op unless the strategy asks to add
+            elif (current_pos and current_pos["side"] == "BUY") or (not current_pos):
+                trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)  # open or add long
+            elif current_pos and current_pos["side"] == "SELL":
+                trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)  # cover short
         elif signal == "SELL":
-            if (current_pos and current_pos["side"] == "BUY") or (not current_pos):
-                trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)
+            if current_pos and current_pos["side"] == "SELL" and not want_add:
+                pass  # repeated signal on a short — no-op unless add requested
+            elif (current_pos and current_pos["side"] == "SELL") or (not current_pos):
+                trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)  # open or add short
+            elif current_pos and current_pos["side"] == "BUY":
+                trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)  # close long
         if trade_result:
             st = trade_result.get("status")
             event = {"symbol": sym, "side": signal, "price": price,

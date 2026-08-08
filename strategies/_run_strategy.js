@@ -29,7 +29,8 @@ process.stdin.on('end', () => {
         results[t.id] = {
           signal: out.signal || 'HOLD',
           confidence: typeof out.confidence === 'number' ? out.confidence : 50,
-          factors: out.factors || {}
+          factors: out.factors || {},
+          add: !!out.add  // strategy requests an add-on to an existing position
         };
       } catch (e) {
         results[t.id] = {signal: 'HOLD', confidence: 50, error: String(e)};

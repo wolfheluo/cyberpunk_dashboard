@@ -1,86 +1,73 @@
 ({
-  NAME: "1s Momentum & OBI Scalping",
-  DESCRIPTION: "結合秒級動能與盤口訂單流 (OBI)。當價格在 3 秒內急漲 > 0.05% 且 OBI > +0.6 時買入；急跌且 OBI < -0.6 時賣出。",
-  
-  // 自定義狀態：用於儲存短時間內的歷史 Tick，以模擬秒 K 線動能
-  tickHistory: [],
-  
+  NAME: "Momentum & OBI Scalping v2",
+  DESCRIPTION: "秒級動能 + 盤口失衡(OBI)進場。持倉管理：虧損>2%停損、盈利>3%了結、盈利且動能續強加倉(add, 30s cooldown)。注意：backtest 無盤口資料，進場條件(OBI)僅 live 有效。",
+  tickHistory: {},
+  lastAdd: {},
+
   evaluate: function (ticker, indicators) {
-    // 1. 取得當前時間戳與即時價格
-    var currentTime = Date.now();
-    var currentPrice = ticker.price;
-    
-    // 2. 獲取盤口不對稱指標 (OBI: Order Book Imbalance)
-    // 參考 strategy_params (2).csv 中的定義，數值範圍為 -1 (賣盤極強) 到 1 (買盤極強)
+    // --- 1. Per-symbol momentum (previous tick vs this tick) ---
+    if (!this.tickHistory[ticker.id]) this.tickHistory[ticker.id] = [];
+    var hist = this.tickHistory[ticker.id];
+    hist.push({ time: Date.now(), price: ticker.price });
+    if (hist.length > 30) hist.shift();
+    if (hist.length < 2) {
+      return { signal: "WAIT", confidence: 0, factors: { reason: "accumulating" } };
+    }
+    var prev = hist[hist.length - 2].price;
+    var momentumPct = ((ticker.price - prev) / prev) * 100;
+
+    // --- 2. Order book imbalance (live only; 0 in backtests) ---
     var obi = (ticker.book && ticker.book.imbalance !== undefined) ? ticker.book.imbalance : 0;
-    
-    // 將最新一筆報價寫入歷史紀錄
-    this.tickHistory.push({ time: currentTime, price: currentPrice });
-    
-    // 過濾掉超過 3,000 毫秒 (3秒) 的舊數據，只保留極短線資料
-    this.tickHistory = this.tickHistory.filter(function(tick) {
-      return (currentTime - tick.time) <= 3000;
-    });
-    
-    // 剛啟動時若資料量不足，則先回傳 WAIT 等待數據累積
-    if (this.tickHistory.length < 2) {
-      return { 
-        signal: "WAIT", 
-        confidence: 0, 
-        factors: { reason: "Warming up short-term data" } 
-      };
+
+    var pos = ticker.position;
+    var f = { momentum_pct: momentumPct, obi: obi };
+
+    // --- 3. No position: entry on momentum burst + OBI confirmation ---
+    if (!pos) {
+      if (momentumPct >= 0.05 && obi >= 0.6) {
+        f.action = "open_long";
+        return { signal: "BUY", confidence: 80, factors: f };
+      }
+      if (momentumPct <= -0.05 && obi <= -0.6) {
+        f.action = "open_short";
+        return { signal: "SELL", confidence: 80, factors: f };
+      }
+      f.action = "wait_entry";
+      return { signal: "HOLD", confidence: 50, factors: f };
     }
-    
-    // 3. 計算短線微觀動量 (當前價格 vs 3 秒前價格的變化百分比)
-    var oldestTick = this.tickHistory[0];
-    var priceChangePct = ((currentPrice - oldestTick.price) / oldestTick.price) * 100;
-    
-    // 4. 設定進出場門檻 (暫不考慮手續費與滑點)
-    var MOMENTUM_THRESHOLD = 0.05; // 3 秒內價格變動需超過 0.05%
-    var OBI_THRESHOLD = 0.6;       // 盤口買賣壓強度需超過 0.6
-    
-    var isUpwardBurst = priceChangePct >= MOMENTUM_THRESHOLD;
-    var isDownwardBurst = priceChangePct <= -MOMENTUM_THRESHOLD;
-    
-    var isBuyWallStrong = obi >= OBI_THRESHOLD;
-    var isSellWallStrong = obi <= -OBI_THRESHOLD;
-    
-    // --- 決策邏輯 ---
-    
-    // 做多 (BUY)：發現秒級急漲，同時盤口買單極為厚實
-    if (isUpwardBurst && isBuyWallStrong) {
-      return { 
-        signal: "BUY", 
-        confidence: 90, 
-        factors: { 
-          momentum_3s_pct: priceChangePct, 
-          obi: obi,
-          trigger_price: currentPrice
-        } 
-      };
+
+    // --- 4. Position held: manage by performance ---
+    var entry = pos.entry_price, side = pos.side;
+    var pnlPct = side === "BUY"
+      ? ((ticker.price - entry) / entry) * 100
+      : ((entry - ticker.price) / entry) * 100;
+    f.pnl_pct = pnlPct;
+    f.position = side;
+
+    // 4a. Stop loss: -2% → close the position
+    if (pnlPct <= -2) {
+      f.action = "stop_loss";
+      return { signal: side === "BUY" ? "SELL" : "BUY", confidence: 90, factors: f };
     }
-    
-    // 做空/平倉 (SELL)：發現秒級急跌，同時盤口湧現大量賣單
-    if (isDownwardBurst && isSellWallStrong) {
-      return { 
-        signal: "SELL", 
-        confidence: 90, 
-        factors: { 
-          momentum_3s_pct: priceChangePct, 
-          obi: obi,
-          trigger_price: currentPrice
-        } 
-      };
+    // 4b. Take profit: +3% → close the position
+    if (pnlPct >= 3) {
+      f.action = "take_profit";
+      return { signal: side === "BUY" ? "SELL" : "BUY", confidence: 85, factors: f };
     }
-    
-    // 不符合爆發條件，繼續持有或觀望 (HOLD)
-    return { 
-      signal: "HOLD", 
-      confidence: 50, 
-      factors: { 
-        momentum_3s_pct: priceChangePct, 
-        obi: obi 
-      } 
-    };
+    // 4c. Profit + momentum continues in our direction + OBI agrees → add-on
+    var addOk = (side === "BUY" && momentumPct > 0.03 && obi >= 0.5) ||
+                (side === "SELL" && momentumPct < -0.03 && obi <= -0.5);
+    if (addOk && pnlPct > 0) {
+      if (!this.lastAdd[ticker.id] || Date.now() - this.lastAdd[ticker.id] > 30000) {
+        this.lastAdd[ticker.id] = Date.now();
+        f.action = "add_on";
+        return { signal: side, confidence: 75, factors: f, add: true };
+      }
+      f.action = "add_cooldown";
+      return { signal: "HOLD", confidence: 60, factors: f };
+    }
+    // 4d. Otherwise hold
+    f.action = "hold";
+    return { signal: "HOLD", confidence: 50, factors: f };
   }
 })
