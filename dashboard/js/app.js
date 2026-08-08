@@ -305,7 +305,7 @@ function renderPipeline(pulse){
 }
 function animatePipeline(){
   if(!document.getElementById('pipelineCanvas')){pipeAnimId=null;return;}
-  pipePulse=(pipePulse+0.06)%(8*2);
+  pipePulse=(pipePulse+0.03)%(8*2);
   if(DATA&&DATA.tickers){
     var hasBuy=false,hasReject=(DATA.rejected||0)>0,hasFail=(DATA.failed||0)>0;
     for(var i=0;i<DATA.tickers.length;i++){if(DATA.tickers[i].signal==='BUY'){hasBuy=true;break;}}
