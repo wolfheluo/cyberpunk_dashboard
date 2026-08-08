@@ -278,9 +278,6 @@ var strategiesList=[],activeStratFile='',editingFile='';
 function loadStrategies(){
   fetch('/api/strategies').then(function(r){return r.json();}).then(function(d){
     strategiesList=d.strategies;activeStratFile=d.active;
-    var sel=document.getElementById('strategySelect');sel.innerHTML='';
-    for(var i=0;i<strategiesList.length;i++){var s=strategiesList[i];sel.innerHTML+='<option value="'+s.filename+'"'+(s.filename===d.active?' selected':'')+'>'+s.name+'</option>';}
-    document.getElementById('activeStratLabel').textContent=d.strategies.find(function(s){return s.filename===d.active;})?.name||'--';
     var as=document.getElementById('acctStrategySelect');if(as){as.innerHTML='';for(var j=0;j<strategiesList.length;j++){var ss=strategiesList[j];as.innerHTML+='<option value="'+ss.filename+'"'+(ss.filename===d.active?' selected':'')+'>'+ss.name+'</option>';}}
   });
 }
