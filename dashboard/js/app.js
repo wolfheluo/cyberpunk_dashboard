@@ -258,11 +258,11 @@ function renderPipeline(pulse){
   var t=pulse||0;
   var nodes=[
     {x:cx,y:cy,label:'SIGNAL',color:'#00E5FF',active:true},
-    {x:cx+step,y:cy-8,label:'WAIT',color:'#5A6275',active:false},
+    {x:cx+step,y:cy-16,label:'WAIT',color:'#5A6275',active:false},
     {x:cx+step*2,y:cy,label:'RISK',color:'#00FF66',active:true},
-    {x:cx+step*3,y:cy-8,label:'REJECT',color:'#5A6275',active:false},
+    {x:cx+step*3,y:cy-16,label:'REJECT',color:'#5A6275',active:false},
     {x:cx+step*4,y:cy,label:'ORDER',color:'#00E5FF',active:true},
-    {x:cx+step*5,y:cy-8,label:'FAIL',color:'#5A6275',active:false},
+    {x:cx+step*5,y:cy-16,label:'FAIL',color:'#5A6275',active:false},
     {x:cx+step*6,y:cy,label:'FILL',color:'#00FF66',active:true},
     {x:cx+step*7,y:cy,label:'DONE',color:'#00E5FF',active:true}
   ];
@@ -300,7 +300,7 @@ function renderPipeline(pulse){
     br=Math.max(2,br);
     ctx.beginPath();ctx.arc(nd.x,nd.y,br,0,Math.PI*2);ctx.fillStyle=nd.color;ctx.fill();
     if(nd.active){ctx.shadowColor=nd.color;ctx.shadowBlur=Math.max(2,5+Math.sin(t+n*0.5)*3);ctx.fill();ctx.shadowBlur=0;}
-    ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.fillText(nd.label,nd.x-12,nd.y+16);
+    ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.fillText(nd.label,nd.x-14,nd.y+18);
   }
 }
 function animatePipeline(){
