@@ -86,7 +86,7 @@ function backtestOne(strategy, symbol, klines) {
     const price = k.close;
     closesHistory.push(price);
     if (i < WARMUP_DAYS) {
-      equityCurve.push(cash + (position ? position.qty * price : 0));
+      equityCurve.push(cash + (position ? position.qty * price * (position.side === 'SELL' ? -1 : 1) : 0));
       continue;
     }
     const macd = calcMACD(closesHistory);
@@ -121,24 +121,42 @@ function backtestOne(strategy, symbol, klines) {
     } catch (e) { /* per-bar errors are ignored, same as live trading */ }
 
     if (signal === 'BUY') {
-      const notional = Math.min(cash * TRADE_SIZE_PCT, cash);
-      if (notional >= 10) {
-        const qty = notional / price;
-        cash -= notional;
-        if (position) {
-          position.entry = (position.entry * position.qty + price * qty) / (position.qty + qty);
-          position.qty += qty;
-        } else {
-          position = {qty: qty, entry: price};
+      if (position && position.side === 'SELL') {
+        // Cover short (entire position; skip if insufficient cash)
+        const notional = position.qty * price;
+        if (notional <= cash) {
+          cash -= notional;
+          position = null;
+          tradeCount++; buyCount++;
         }
-        tradeCount++; buyCount++;
+      } else if (!position) {
+        // Open long
+        const notional = Math.min(cash * TRADE_SIZE_PCT, cash);
+        if (notional >= 10) {
+          const qty = notional / price;
+          cash -= notional;
+          position = {side: 'BUY', qty: qty, entry: price};
+          tradeCount++; buyCount++;
+        }
       }
-    } else if (signal === 'SELL' && position) {
-      cash += position.qty * price;
-      position = null;
-      tradeCount++; sellCount++;
+    } else if (signal === 'SELL') {
+      if (position && position.side === 'BUY') {
+        // Close long
+        cash += position.qty * price;
+        position = null;
+        tradeCount++; sellCount++;
+      } else if (!position) {
+        // Open short: sell now, buy back later
+        const notional = Math.min(cash * TRADE_SIZE_PCT, cash);
+        if (notional >= 10) {
+          const qty = notional / price;
+          cash += notional;
+          position = {side: 'SELL', qty: qty, entry: price};
+          tradeCount++; sellCount++;
+        }
+      }
     }
-    equityCurve.push(cash + (position ? position.qty * price : 0));
+    equityCurve.push(cash + (position ? position.qty * price * (position.side === 'SELL' ? -1 : 1) : 0));
   }
 
   if (position && klines.length) cash += position.qty * klines[klines.length - 1].close;

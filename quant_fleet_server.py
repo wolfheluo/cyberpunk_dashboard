@@ -212,88 +212,140 @@ def fetch_json(url):
 # TRADE EXECUTION
 # ============================================================
 def execute_trade(symbol, side, price, strategy_name, signal_id=None):
-    """Execute a paper trade: deduct cash, record trade, update position."""
+    """Execute a paper trade.
+
+    BUY  — opens/adds a long position, or covers an existing short.
+    SELL — closes an existing long, or opens/adds a short position.
+    Returns {"trade_id","quantity","notional"} or None (no-op / insufficient funds).
+    """
     with db_lock:
         portfolio = db_conn.execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
         if not portfolio: return None
         cash = portfolio[0]
+        pos = db_conn.execute("SELECT side,quantity,entry_price FROM positions WHERE symbol=?", (symbol,)).fetchone()
+        realized = 0.0
+        trade_side = side
 
-        # Determine trade size
-        if side == "BUY":
+        if side == "BUY" and pos and pos[0] == "SELL":
+            # ---- Cover short: buy back (may be partial if cash is limited) ----
+            qty = min(pos[1], cash / price) if price else 0
+            if qty <= 0: return None
+            notional = qty * price
+            realized = (pos[2] - price) * qty
+            cash_change = -notional
+            remain = pos[1] - qty
+            if remain <= 0.00001:
+                db_conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
+            else:
+                db_conn.execute("UPDATE positions SET quantity=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                                (remain, symbol))
+        elif side == "BUY":
+            # ---- Open / add long ----
             notional = min(cash * TRADE_SIZE_PCT, cash)
             if notional < 10: return None  # min $10
-            quantity = notional / price
-        else:  # SELL
-            pos = db_conn.execute("SELECT quantity FROM positions WHERE symbol=?",(symbol,)).fetchone()
-            if not pos or pos[0] <= 0: return None
-            quantity = pos[0]
-            notional = quantity * price
+            qty = notional / price
+            cash_change = -notional
+            if pos:  # add to existing long
+                new_qty = pos[1] + qty
+                avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
+                db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                                (new_qty, avg_entry, price, (price-avg_entry)*new_qty, symbol))
+            else:
+                db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
+                                (symbol, "BUY", price, qty, price, 0.0, strategy_name))
+        elif side == "SELL" and pos and pos[0] == "BUY":
+            # ---- Close long: liquidate entire position ----
+            qty = pos[1]
+            notional = qty * price
+            realized = (price - pos[2]) * qty
+            cash_change = notional
+            db_conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
+        else:
+            # ---- Open / add short: sell now, buy back later ----
+            notional = min(cash * TRADE_SIZE_PCT, cash)
+            if notional < 10: return None  # min $10
+            qty = notional / price
+            cash_change = notional
+            if pos:  # add to existing short
+                new_qty = pos[1] + qty
+                avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
+                db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                                (new_qty, avg_entry, price, (avg_entry-price)*new_qty, symbol))
+            else:
+                db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
+                                (symbol, "SELL", price, qty, price, 0.0, strategy_name))
 
         # Record trade
         cur = db_conn.execute(
             "INSERT INTO trades (symbol,side,price,quantity,notional,strategy,signal_id) VALUES (?,?,?,?,?,?,?)",
-            (symbol, side, price, round(quantity, 8), round(notional, 2), strategy_name, signal_id)
-        )
+            (symbol, trade_side, price, round(qty, 8), round(notional, 2), strategy_name, signal_id))
         trade_id = cur.lastrowid
 
         # Update cash
-        cash_change = -notional if side == "BUY" else notional
         db_conn.execute("UPDATE portfolio SET cash=cash+?, updated_at=datetime('now', '+8 hours') WHERE id=1",
                         (cash_change,))
-
-        # Update position
-        existing = db_conn.execute("SELECT id,quantity,entry_price FROM positions WHERE symbol=?",(symbol,)).fetchone()
-        if side == "BUY":
-            if existing:
-                new_qty = existing[1] + quantity
-                avg_entry = (existing[2]*existing[1] + price*quantity) / new_qty
-                db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
-                               (new_qty, avg_entry, price, (price-avg_entry)*new_qty, symbol))
-            else:
-                db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
-                               (symbol, side, price, quantity, price, 0.0, strategy_name))
-        else:  # SELL
-            if existing and existing[1] - quantity <= 0.00001:
-                db_conn.execute("DELETE FROM positions WHERE symbol=?",(symbol,))
-
         db_conn.commit()
-        return {"trade_id": trade_id, "quantity": round(quantity, 8), "notional": round(notional, 2)}
+        return {"trade_id": trade_id, "quantity": round(qty, 8), "notional": round(notional, 2),
+                "realized_pnl": round(realized, 2)}
 
 def portfolio_stats(initial_capital=INITIAL_CAPITAL):
-    """FIFO-based realized PnL + equity curve from trade history (real metrics, no fabricated values).
-
+    """Average-cost based realized PnL + equity curve from trade history.
+    Supports long AND short positions (SELL opens short, BUY covers).
     Returns (win_rate, sharpe, max_drawdown) — each None when there is not enough data.
     """
     rows = db_conn.execute("SELECT symbol,side,price,quantity FROM trades ORDER BY id ASC").fetchall()
     if not rows:
         return None, None, None
-    basis = {}  # symbol -> list of [remaining_qty, price]
-    last_price = {}  # symbol -> most recent trade price (per-symbol MTM)
     cash = initial_capital
+    pos = {}  # symbol -> {"side": "BUY"|"SELL", "qty": float, "entry": float}
+    last_price = {}
     equity = []
     wins = losses = 0
     for sym, side, price, qty in rows:
         last_price[sym] = price
+        p = pos.get(sym)
         if side == "BUY":
             cash -= qty * price
-            basis.setdefault(sym, []).append([qty, price])
-        else:
+            if p and p["side"] == "SELL":
+                # cover short (may flip to long if over-covered)
+                realized = (p["entry"] - price) * qty
+                if realized > 0: wins += 1
+                elif realized < 0: losses += 1
+                remain = p["qty"] - qty
+                if remain > 0.00001:
+                    pos[sym] = {"side": "SELL", "qty": remain, "entry": p["entry"]}
+                elif remain < -0.00001:
+                    pos[sym] = {"side": "BUY", "qty": -remain, "entry": price}
+                else:
+                    del pos[sym]
+            elif p:
+                new_qty = p["qty"] + qty
+                pos[sym] = {"side": "BUY", "qty": new_qty,
+                            "entry": (p["entry"] * p["qty"] + price * qty) / new_qty}
+            else:
+                pos[sym] = {"side": "BUY", "qty": qty, "entry": price}
+        else:  # SELL
             cash += qty * price
-            remaining = qty
-            realized = 0.0
-            for lot in basis.get(sym, []):
-                if remaining <= 0:
-                    break
-                take = min(lot[0], remaining)
-                realized += take * (price - lot[1])
-                lot[0] -= take
-                remaining -= take
-            basis[sym] = [l for l in basis[sym] if l[0] > 0]
-            if realized > 0:
-                wins += 1
-            elif realized < 0:
-                losses += 1
-        mtm = sum(lot[0] * last_price.get(s, price) for s, lots in basis.items() for lot in lots)
+            if p and p["side"] == "BUY":
+                # close long (may flip to short if over-sold)
+                realized = (price - p["entry"]) * qty
+                if realized > 0: wins += 1
+                elif realized < 0: losses += 1
+                remain = p["qty"] - qty
+                if remain > 0.00001:
+                    pos[sym] = {"side": "BUY", "qty": remain, "entry": p["entry"]}
+                elif remain < -0.00001:
+                    pos[sym] = {"side": "SELL", "qty": -remain, "entry": price}
+                else:
+                    del pos[sym]
+            elif p:
+                new_qty = p["qty"] + qty
+                pos[sym] = {"side": "SELL", "qty": new_qty,
+                            "entry": (p["entry"] * p["qty"] + price * qty) / new_qty}
+            else:
+                pos[sym] = {"side": "SELL", "qty": qty, "entry": price}
+        # Mark to market: long = +qty*price, short = -qty*price (liability)
+        mtm = sum(v["qty"] * last_price.get(s, price) * (1 if v["side"] == "BUY" else -1) for s, v in pos.items())
         equity.append(cash + mtm)
 
     win_rate = (wins / (wins + losses) * 100) if (wins + losses) else None
@@ -338,17 +390,19 @@ def fetch_all_data():
         pf = db_conn.execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
         cash = pf[0] if pf else INITIAL_CAPITAL
         positions_map = {}
-        for r in db_conn.execute("SELECT symbol,quantity,entry_price FROM positions"):
-            positions_map[r[0]] = {"quantity":r[1],"entry_price":r[2]}
+        for r in db_conn.execute("SELECT symbol,side,quantity,entry_price FROM positions"):
+            positions_map[r[0]] = {"side":r[1],"quantity":r[2],"entry_price":r[3]}
 
     # Re-mark open positions with current prices (positions would otherwise be stale)
     with db_lock:
-        for r in db_conn.execute("SELECT symbol,quantity,entry_price FROM positions").fetchall():
+        for r in db_conn.execute("SELECT symbol,side,quantity,entry_price FROM positions").fetchall():
             pm = price_map.get(r[0] + "USDT")
             if pm:
+                # long: (cur-entry)*qty ; short: (entry-cur)*qty
+                upnl = (pm["price"] - r[3]) * r[2] if r[1] == "BUY" else (r[3] - pm["price"]) * r[2]
                 db_conn.execute(
                     "UPDATE positions SET current_price=?, unrealized_pnl=?, updated_at=datetime('now', '+8 hours') WHERE symbol=?",
-                    (pm["price"], (pm["price"] - r[2]) * r[1], r[0]))
+                    (pm["price"], upnl, r[0]))
         db_conn.commit()
 
     # Record prices for historical tracking (every 5 min to avoid bloat)
@@ -459,10 +513,14 @@ def fetch_all_data():
         # Auto-execute trade on BUY/SELL
         current_pos = positions_map.get(sym)
         trade_result = None
-        if signal == "BUY" and (not current_pos):
-            trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)
-        elif signal == "SELL" and current_pos:
-            trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)
+        if signal == "BUY":
+            # cover short, or open long when flat
+            if (current_pos and current_pos["side"] == "SELL") or (not current_pos):
+                trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)
+        elif signal == "SELL":
+            # close long, or open short when flat
+            if (current_pos and current_pos["side"] == "BUY") or (not current_pos):
+                trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)
         if trade_result is None and signal == "BUY":
             result["rejected"] = result.get("rejected", 0) + 1
         elif trade_result is None and signal == "SELL":
@@ -497,7 +555,7 @@ def fetch_all_data():
         if t["signal"] in ("BUY","SELL"):
             color = "#00FF66" if t["signal"]=="BUY" else "#FF2A6D"
             pos_info = ""
-            if pos: pos_info = f' | POS: {pos["qty"]:.4f} @${pos["entry"]:.2f}'
+            if pos: pos_info = f' | POS: {pos["side"]} {pos["qty"]:.4f} @${pos["entry"]:.2f}'
             result["exec_log"].append({
                 "ts":ts,"type":t["signal"].lower(),
                 "html":f'[{ts}] {_esc(t["id"])} → <span style="color:{color}">{t["signal"]}</span> conf={t["confidence"]}%{pos_info}'
@@ -505,6 +563,7 @@ def fetch_all_data():
 
     # Portfolio summary
     pos_value = sum(pos["qty"]*(price_map.get(pos_sym+"USDT",{}).get("price",0) or 0)
+                    * (1 if pos["side"] == "BUY" else -1)
                     for pos_sym, pos in positions_map2.items())
     total_equity = cash + pos_value
     pnl = total_equity - INITIAL_CAPITAL
@@ -582,7 +641,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200,{"trades":[{"symbol":r[0],"side":r[1],"price":r[2],"quantity":r[3],"notional":r[4],"status":r[5],"strategy":r[6],"created_at":r[7]} for r in rows]})
         elif self.path=="/api/portfolio":
             pf = db_conn.execute("SELECT cash,initial_capital FROM portfolio WHERE id=1").fetchone()
-            pos_val = sum(r[2]*(r[0] if r[0] else r[1]) for r in db_conn.execute("SELECT current_price,entry_price,quantity FROM positions").fetchall())
+            pos_val = sum(r[3]*(r[0] if r[0] else r[1]) * (1 if r[2] == "BUY" else -1)
+                           for r in db_conn.execute("SELECT current_price,entry_price,side,quantity FROM positions").fetchall())
             self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,"total_equity":pf[0]+pos_val})
         elif self.path == "/api/symbols":
             rows = db_conn.execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()

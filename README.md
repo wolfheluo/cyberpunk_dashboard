@@ -197,9 +197,11 @@ equity curves and return comparison. Requires Node.js.
 
 - Initial capital: **$10,000** (configurable in `init_db.py`)
 - Position size: **5%** of cash per trade (`TRADE_SIZE_PCT` in `quant_fleet_server.py`)
-- BUY executes when the active strategy signals BUY (only when flat on that symbol)
-- SELL liquidates the full position on a SELL signal
-- All trades are recorded in SQLite; positions are marked to market on every scan
+- **BUY** opens/adds a long position, or covers an existing short
+- **SELL** closes an existing long, or opens a short position when flat
+- One position per symbol (long and short are mutually exclusive)
+- Short P&L is `(entry − current) × qty`; positions are marked to market on every scan
+- All trades are recorded in SQLite
 
 ### Portfolio KPIs
 
