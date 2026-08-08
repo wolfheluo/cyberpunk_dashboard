@@ -32,14 +32,14 @@ var strategiesList=[],activeStratFile='',editingFile='';
 // ============================================================
 function loadStrategies(){
   fetch('/api/strategies').then(function(r){return r.json();}).then(function(d){
-    strategiesList=d.strategies;activeStratFile=d.active;
+    strategiesList=d.strategies;activeStratFile=d.active;loadActiveJSStrategy();
     var as=document.getElementById('acctStrategySelect');if(as){as.innerHTML='';for(var j=0;j<strategiesList.length;j++){var ss=strategiesList[j];as.innerHTML+='<option value="'+ss.filename+'"'+(ss.filename===d.active?' selected':'')+'>'+ss.name+'</option>';}}
   });
 }
 function activateStrategy(fname){
   if(!fname||fname===activeStratFile)return;
   fetch('/api/strategy/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:fname})})
-    .then(function(r){return r.json();}).then(function(d){activeStratFile=d.active;document.getElementById('activeStratLabel').textContent=d.name;document.getElementById('strategySelect').value=d.active;});
+    .then(function(r){return r.json();}).then(function(d){activeStratFile=d.active;loadActiveJSStrategy();document.getElementById('activeStratLabel').textContent=d.name;document.getElementById('strategySelect').value=d.active;});
 }
 
 // ============================================================
@@ -372,14 +372,40 @@ function updatePrices(){
   }
 }
 
+// ============================================================
+// JS STRATEGY EVALUATOR (client-side)
+// ============================================================
+var activeJSStrategy=null;
+function loadActiveJSStrategy(){
+  if(!activeStratFile) return;
+  fetch('/api/strategy/'+activeStratFile+'/code').then(function(r){return r.json();}).then(function(d){
+    eval('activeJSStrategy='+d.code.replace(/\n/g,'\n'));
+  }).catch(function(){});
+}
+function evaluateJSStrategy(ticker){
+  // Compute indicators
+  var closes=DATA._closes||[],price=ticker.price;
+  var rsi=calcRSI(closes,14),sma20=calcSMA(closes,20),ema12=calcEMA(closes,12),ema26=calcEMA(closes,26);
+  var volSurge=ticker.volume>0;
+  try{
+    if(evaluate in activeJSStrategy){
+      return activeJSStrategy.evaluate({id:ticker.id,name:ticker.name,price:price,volume:ticker.volume_m,change_pct:ticker.change_pct},{rsi:rsi,sma20:sma20,ema12:ema12,ema26:ema26,volSurge:volSurge,closes:closes});
+    }
+  }catch(e){}
+  return {signal:"HOLD",confidence:50};
+}
+function calcRSI(c,p){p=p||14;if(c.length<p+1)return 50;var g=0,l=0;for(var i=1;i<=p;i++){var d=c[c.length-i]-c[c.length-i-1];if(d>0)g+=d;else l-=d;}if(l===0)return 100;return 100-(100/(1+g/l));}
+function calcSMA(c,p){p=p||20;if(!c.length)return 0;var s=0,n=Math.min(c.length,p);for(var i=0;i<n;i++)s+=c[c.length-1-i];return s/n;}
+function calcEMA(c,p){p=p||12;if(c.length<2)return c[c.length-1]||0;var m=2/(p+1),e=c[0];for(var i=1;i<c.length;i++)e=(c[i]-e)*m+e;return e;}
+
 var PI=5000;
 function fetchData(){
   var start=Date.now();
   Promise.all([fetch('/api/data').then(function(r){return r.json();}),fetch('/api/positions').then(function(r){return r.json();}),fetch('/api/trades').then(function(r){return r.json();})])
     .then(function(results){var data=results[0],pos=results[1],trades=results[2],latency=Date.now()-start;
-      for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}DATA.positions=pos.positions||[];DATA.trades=trades.trades||[];DATA.connected=true;DATA.latency_ms=latency;
+      for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}if(data.tickers){var cs=[];for(var i=0;i<data.tickers.length;i++){if(data.tickers[i].sparkline)cs=data.tickers[i].sparkline;}if(cs.length)DATA._closes=cs;}DATA.positions=pos.positions||[];DATA.trades=trades.trades||[];DATA.connected=true;DATA.latency_ms=latency;
       document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
-      if(currentPage==='dashboard')R();setTimeout(fetchData,PI);
+      if(DATA.tickers&&activeJSStrategy){for(var i=0;i<DATA.tickers.length;i++){var s=evaluateJSStrategy(DATA.tickers[i]);DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;}}if(currentPage==='dashboard')R();setTimeout(fetchData,PI);
     }).catch(function(err){document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();setTimeout(fetchData,PI);});
 }
 
@@ -520,4 +546,4 @@ loadAccount=function(){
 };
 
 R();animateRadarPulse();
-connectBinanceWS();I18n.init().then(function(){loadStrategies();R();fetchData();});
+connectBinanceWS();I18n.init().then(function(){loadStrategies();loadActiveJSStrategy();R();fetchData();});

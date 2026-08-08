@@ -5,7 +5,6 @@ import http.server
 import json
 import os
 import sqlite3
-import importlib.util
 import urllib.request
 import threading
 from datetime import datetime
@@ -37,8 +36,7 @@ reload_symbols()
 db_lock = threading.Lock()
 exec_log = []
 log_lock = threading.Lock()
-active_strategy = None
-strategy_registry = {}
+active_strategy = "default.js"
 
 def add_log(ts, msg_type, html):
     with log_lock:
@@ -46,30 +44,32 @@ def add_log(ts, msg_type, html):
         if len(exec_log)>200: exec_log.pop(0)
 
 # ============================================================
-# STRATEGY LOADER
+# JS STRATEGY HELPERS
 # ============================================================
-def load_strategies():
-    global strategy_registry, active_strategy
-    strategy_registry = {}
-    if not os.path.isdir(STRATEGIES_DIR): return
-    for fname in sorted(os.listdir(STRATEGIES_DIR)):
-        if not fname.endswith('.py') or fname.startswith('_'): continue
-        path = os.path.join(STRATEGIES_DIR, fname)
-        try:
-            spec = importlib.util.spec_from_file_location(fname[:-3], path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            name = getattr(mod, 'NAME', fname[:-3].replace('_',' ').title())
-            desc = getattr(mod, 'DESCRIPTION', '')
-            strategy_registry[fname] = {"filename":fname,"name":name,"description":desc,"module":mod}
-        except Exception as e:
-            print(f"  [FAIL] {fname}: {e}")
-    if not active_strategy and strategy_registry:
-        active_strategy = list(strategy_registry.keys())[0]
+def list_js_strategies():
+    """Return [{filename, name, description}] for all .js strategy files."""
+    result = []
+    if os.path.isdir(STRATEGIES_DIR):
+        for fname in sorted(os.listdir(STRATEGIES_DIR)):
+            if not fname.endswith('.js') or fname.startswith('_'): continue
+            path = os.path.join(STRATEGIES_DIR, fname)
+            with open(path) as f:
+                content = f.read()
+            # Extract NAME and DESCRIPTION from JS comment-style vars
+            import re
+            name_m = re.search(r'NAME\s*=\s*"([^"]+)"', content)
+            desc_m = re.search(r'DESCRIPTION\s*=\s*"([^"]+)"', content)
+            result.append({
+                "filename": fname,
+                "name": name_m.group(1) if name_m else fname.replace('.js','').replace('_',' ').title(),
+                "description": desc_m.group(1) if desc_m else ""
+            })
+    return result
 
-def get_active_strategy():
-    if active_strategy and active_strategy in strategy_registry:
-        return strategy_registry[active_strategy]
+def get_js_strategy_code(fname):
+    path = os.path.join(STRATEGIES_DIR, fname)
+    if os.path.isfile(path):
+        with open(path) as f: return f.read()
     return None
 
 # ============================================================
@@ -170,9 +170,8 @@ def fetch_all_data():
             "volume":float(t["quoteVolume"]),"high":float(t["highPrice"]),"low":float(t["lowPrice"])
         }
 
-    strat = get_active_strategy()
-    strategy_name = strat["name"] if strat else "none"
-    result = {"tickers":[], "exec_log":[], "timestamp":datetime.now().isoformat()}
+    strategy_name = active_strategy.replace(".js","").replace("_"," ").title() if active_strategy else "none"
+    result = {"tickers":[], "exec_log":[], "timestamp":datetime.now().isoformat(), "rejected":0, "failed":0}
 
     # Get current portfolio
     with db_lock:
@@ -206,15 +205,6 @@ def fetch_all_data():
         }
 
         signal="HOLD"; confidence=50; factors_dict={}
-        if strat:
-            try:
-                out = strat["module"].evaluate(
-                    {"id":sym,"name":name,"price":price,"volume":volume}, indicators)
-                signal = out.get("signal","HOLD")
-                confidence = out.get("confidence",50)
-                factors_dict = out.get("factors",{})
-            except Exception as e:
-                add_log(now_ts(),"error",f'Strategy error {sym}: {e}')
 
         # Record signal
         with db_lock:
@@ -425,7 +415,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(502 if not data else 200, data or {"error":"Binance down"})
         elif self.path=="/api/strategies":
             self._json(200,{
-                "strategies":[{"filename":v["filename"],"name":v["name"],"description":v["description"]} for v in strategy_registry.values()],
+                "strategies":list_js_strategies(),
                 "active":active_strategy
             })
         elif self.path=="/api/positions":
@@ -487,7 +477,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "description": strategy_registry.get(fname, {}).get("description", "")})
 
         elif self.path == "/api/params/ref":
-            ref = "parameter,type,description,example\n"                   "ticker.id,str,Ticker symbol (e.g. BTC),BTC\n"                   "ticker.name,str,Full name (e.g. Bitcoin),Bitcoin\n"                   "ticker.price,float,Current price in USDT,65100.50\n"                   "ticker.volume,float,24h quote volume in USDT,1500000000\n"                   "indicators.rsi_1h,float,RSI(14) on 1h closes (0-100),45.2\n"                   "indicators.sma_4h,float,SMA(20) on 4h closes,64800.30\n"                   "indicators.sma_1h_20,float,SMA(20) on 1h closes,65050.10\n"                   "indicators.ema_12,float,EMA(12) on 1h closes,65120.00\n"                   "indicators.ema_26,float,EMA(26) on 1h closes,65080.50\n"                   "indicators.vol_surge,bool,Volume > 1.2x average,True\n"                   "indicators.closes_1h,list[float],Last 30 1h close prices,[65100,65050,...]\n"                   "indicators.closes_4h,list[float],Last 30 4h close prices,[64800,64750,...]\n"                   "return.signal,str,BUY|SELL|HOLD|WAIT,BUY\n"                   "return.confidence,int,Signal confidence 0-100,82\n"                   "return.factors,dict,Optional factor values for logging,{'rsi':45.2}\n"
+            ref = "parameter,type,description,example\n"                   "ticker.id,string,Symbol (e.g. BTC),BTC\n"                   "ticker.name,string,Full name (e.g. Bitcoin),Bitcoin\n"                   "ticker.price,number,Current price in USDT,65100.50\n"                   "ticker.volume,number,24h quote volume,1500000000\n"                   "ticker.change_pct,number,24h price change %,2.35\n"                   "indicators.rsi,number,RSI(14) 0-100,45.2\n"                   "indicators.sma20,number,SMA(20),65050.10\n"                   "indicators.ema12,number,EMA(12),65120.00\n"                   "indicators.ema26,number,EMA(26),65080.50\n"                   "indicators.volSurge,boolean,Volume > 1.5x average,true\n"                   "indicators.closes,array[number],Last 30 close prices,[65100,65050,...]\n"                   "return.signal,string,BUY|SELL|HOLD|WAIT,BUY\n"                   "return.confidence,number,0-100,82\n"                   "return.factors,object,Optional factor values for logging,{rsi:45.2}\n"
             body = ref.encode()
             self.send_response(200)
             self.send_header("Content-Type","text/csv; charset=utf-8")
@@ -502,9 +492,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path=="/api/strategy/activate":
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
             fname = body.get("filename","")
-            if fname in strategy_registry:
+            path = os.path.join(STRATEGIES_DIR, fname)
+            if os.path.isfile(path) and fname.endswith(".js"):
                 global active_strategy; active_strategy=fname
-                self._json(200,{"active":fname,"name":strategy_registry[fname]["name"]})
+                import re
+                with open(path) as f:
+                    name_m = re.search(r'NAME\s*=\s*"([^"]+)"', f.read())
+                self._json(200,{"active":fname,"name":name_m.group(1) if name_m else fname})
             else: self._json(400,{"error":f"Unknown: {fname}"})
         elif self.path=="/api/trade/simulate":
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
@@ -611,7 +605,6 @@ def main():
     port=8899
     print(f"Quant Fleet on http://localhost:{port}")
     print(f"Initial capital: ${INITIAL_CAPITAL:,.0f}")
-    load_strategies()
     server=http.server.HTTPServer(("0.0.0.0",port),Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: db_conn.close(); server.shutdown()
