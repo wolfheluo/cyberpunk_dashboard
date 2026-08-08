@@ -226,10 +226,13 @@ def fetch_all_data():
 
         # Auto-execute trade on BUY/SELL
         current_pos = positions_map.get(sym)
+        trade_result = None
         if signal == "BUY" and (not current_pos):
-            execute_trade(sym, "BUY", price, strategy_name, signal_id)
+            trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)
         elif signal == "SELL" and current_pos:
-            execute_trade(sym, "SELL", price, strategy_name, signal_id)
+            trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)
+        if trade_result is None and signal in ("BUY","SELL"):
+            result["rejected"] = result.get("rejected", 0) + 1
 
         sparkline = closes_1h[-18:] if len(closes_1h)>=18 else closes_1h
         result["tickers"].append({
@@ -325,7 +328,7 @@ def fetch_all_data():
         "strategy_matrix":{"strategies":strategy_names,"timeframes":timeframes_list,"cells":cells},
         "kpi":kpi,"factors":factors,
         "exec_log":list(exec_log[-50:]),
-        "active_strategy":strategy_name,"order_flow":{}
+        "active_strategy":strategy_name,"order_flow":{},"rejected":result.get("rejected",0)
     }
 
 # ============================================================
