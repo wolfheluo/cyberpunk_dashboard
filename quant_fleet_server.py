@@ -568,6 +568,7 @@ def fetch_all_data():
         result["tickers"].append({
             "id": sym, "name": name, "price": price, "change_pct": change_pct,
             "volume_m": round(volume / 1_000_000, 1), "signal": signal, "confidence": confidence,
+            "book": info["ticker"]["book"],
             "sparkline": sparkline,
             "_rsi": round(info["indicators"]["rsi"], 1),
             "_sma4h": round(info["indicators"]["sma20"], price < 1 and 4 or 2),
@@ -690,19 +691,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             path = os.path.join(_BASE, "dashboard", "i18n", fname)
             if os.path.isfile(path):
                 with open(path, "rb") as f: content = f.read()
-                self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
+                self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
             else: self.send_error(404)
         elif self.path.startswith("/dashboard/"):
             fpath = os.path.join(_BASE, self.path.lstrip("/"))
             if os.path.isfile(fpath):
                 ct = "text/css" if fpath.endswith(".css") else "application/javascript" if fpath.endswith(".js") else "text/plain"
                 with open(fpath, "rb") as f: content = f.read()
-                self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
+                self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
             else: self.send_error(404)
         elif self.path in ("/","/index.html"):
             try:
                 with open(HTML_PATH,"rb") as f: content=f.read()
-                self.send_response(200); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
+                self.send_response(200); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
             except: self.send_error(404)
         elif self.path.startswith("/api/strategy/") and self.path.endswith("/code"):
             try:

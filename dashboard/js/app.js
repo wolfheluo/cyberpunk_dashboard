@@ -351,24 +351,37 @@ function renderExecLog(){
 // ============================================================
 // FETCH LOOP
 // ============================================================
-// Binance WebSocket — real-time price updates + order book (combined stream)
-var binanceWS=null,wsPrices={},wsBook={};
+// Binance WebSocket — real-time prices + order book.
+// Two separate raw streams: !bookTicker does NOT deliver in a combined
+// stream (verified against the API), so they cannot share one connection.
+var binanceWS=null,bookWS=null,wsPrices={},wsBook={};
 function connectBinanceWS(){
   if(binanceWS)try{binanceWS.close();}catch(e){}
-  binanceWS=new WebSocket('wss://stream.binance.com:9443/stream?streams=!miniTicker@arr/!bookTicker');
+  binanceWS=new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
   binanceWS.onmessage=function(e){
     try{
-      var msg=JSON.parse(e.data),data=msg.data;
-      if(msg.stream&&msg.stream.indexOf('miniTicker')===0&&Array.isArray(data)){
+      var data=JSON.parse(e.data);
+      if(Array.isArray(data)){
         data.forEach(function(t){wsPrices[t.s]={price:parseFloat(t.c),high:parseFloat(t.h),low:parseFloat(t.l)};});
         updatePrices();
-      }else if(msg.stream&&msg.stream.indexOf('bookTicker')===0&&data&&data.s){
-        wsBook[data.s]={best_bid:parseFloat(data.b),best_ask:parseFloat(data.a),bid_qty:parseFloat(data.B),ask_qty:parseFloat(data.A)};
       }
     }catch(ex){}
   };
   binanceWS.onclose=function(){setTimeout(connectBinanceWS,5000);};
   binanceWS.onerror=function(){binanceWS.close();};
+
+  if(bookWS)try{bookWS.close();}catch(e){}
+  bookWS=new WebSocket('wss://stream.binance.com:9443/ws/!bookTicker');
+  bookWS.onmessage=function(e){
+    try{
+      var t=JSON.parse(e.data);
+      if(t&&t.s){
+        wsBook[t.s]={best_bid:parseFloat(t.b),best_ask:parseFloat(t.a),bid_qty:parseFloat(t.B),ask_qty:parseFloat(t.A)};
+      }
+    }catch(ex){}
+  };
+  bookWS.onclose=function(){setTimeout(connectBinanceWS,5000);};
+  bookWS.onerror=function(){bookWS.close();};
 }
 var _priceBuffer={};
 function updateRailPrices(){
@@ -424,7 +437,7 @@ function evaluateJSStrategy(ticker){
   var volSurge=ticker.volume>0;
   var macd=calcMACD(closes),bb=calcBB(closes);
   var w=wsPrices[ticker.id+'USDT']||{};
-  var b=wsBook[ticker.id+'USDT'];
+  var b=wsBook[ticker.id+'USDT']||ticker.book; // WS book may be unavailable; fall back to 1s poll
   var book=b?{best_bid:b.best_bid,best_ask:b.best_ask,bid_qty:b.bid_qty,ask_qty:b.ask_qty,
     spread_pct:b.best_ask&&b.best_bid?((b.best_ask-b.best_bid)/((b.best_ask+b.best_bid)/2)*100):0,
     imbalance:(b.bid_qty+b.ask_qty)?(b.bid_qty-b.ask_qty)/(b.bid_qty+b.ask_qty):0}:null;
