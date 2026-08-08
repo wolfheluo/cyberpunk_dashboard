@@ -214,13 +214,6 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
           <div id="accountPositions" class="mb-4"><div class="text-[#5A6275] text-[12px]">Loading...</div></div>
           <div class="text-sm text-[#00E5FF] mb-2" data-i18n="trade_history">TRADE HISTORY</div>
           <div id="accountTrades" class="text-[11px]"><div class="text-[#5A6275]">Loading...</div></div>
-          <div class="text-sm text-[#00E5FF] mb-2 mt-4" data-i18n="watchlist_mgmt">WATCHLIST MANAGEMENT</div>
-          <div class="flex gap-2 mb-2">
-            <input id="newSymbol" class="bg-[#0A0C12] border border-[#1E222D] text-[#c0c8d8] px-2 py-1 text-[12px] rounded w-32 font-mono" placeholder="DOGEUSDT" style="outline:none">
-            <input id="newSymbolName" class="bg-[#0A0C12] border border-[#1E222D] text-[#c0c8d8] px-2 py-1 text-[12px] rounded w-24 font-mono" placeholder="Dogecoin" style="outline:none">
-            <button class="btn-sm primary" onclick="addSymbol()" data-i18n="btn_add">+ ADD</button>
-          </div>
-          <div id="symbolList" class="text-[11px] space-y-1"></div>
         </div>
         <div class="flex-1 flex flex-col p-3 overflow-hidden">
           <div class="text-sm text-[#00E5FF] mb-2" data-i18n="equity_curve">EQUITY CURVE</div>
@@ -279,7 +272,7 @@ function switchPage(page){
   document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-page')===page);});
   document.querySelectorAll('.page').forEach(function(el){el.classList.toggle('active',el.id==='page-'+page);});
   if(page==='strategies')loadStrategyList();
-  if(page==='backtest')runBacktest();if(page==='account')loadAccount();if(page==='watchlist')loadSymbols();if(page==='watchlist')loadSymbols();
+  if(page==='backtest')runBacktest();if(page==='account')loadAccount();if(page==='watchlist')loadSymbols();
 }
 
 // ============================================================
