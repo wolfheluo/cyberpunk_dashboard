@@ -276,7 +276,7 @@ function renderPipeline(pulse){
   if(pipeHasSignal==='reject')activeEdges=[[0,2],[2,3],[3,0]];
   else if(pipeHasSignal==='fail')activeEdges=[[0,2],[2,4],[4,5],[5,0]];
   else if(pipeHasSignal==='exec')activeEdges=[[0,2],[2,4],[4,6],[6,7]];
-  else activeEdges=[[0,1],[1,0]];
+  else activeEdges=[[0,1]];
   ctx.lineWidth=0.8;
   for(var i=0;i<allEdges.length;i++){
     var e=allEdges[i],a=nodes[e[0]],b=nodes[e[1]];
