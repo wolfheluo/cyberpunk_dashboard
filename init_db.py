@@ -65,6 +65,13 @@ def init_db():
             symbol TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
             added_at TEXT DEFAULT (datetime('now', '+8 hours'))
         );
+        CREATE TABLE IF NOT EXISTS prices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL, price REAL NOT NULL,
+            recorded_at TEXT DEFAULT (datetime('now', '+8 hours'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_prices_symbol ON prices(symbol);
+        CREATE INDEX IF NOT EXISTS idx_prices_time ON prices(recorded_at);
     """)
     if not conn.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0]:
         conn.executemany("INSERT INTO watchlist (symbol,name) VALUES (?,?)", DEFAULT_SYMBOLS)

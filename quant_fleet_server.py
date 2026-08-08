@@ -181,7 +181,20 @@ def fetch_all_data():
         for r in db_conn.execute("SELECT symbol,quantity,entry_price FROM positions"):
             positions_map[r[0]] = {"quantity":r[1],"entry_price":r[2]}
 
+    # Record prices for historical tracking (every 5 min to avoid bloat)
+    with db_lock:
+        last_rec = db_conn.execute("SELECT MAX(recorded_at) FROM prices").fetchone()[0]
+        should_record = not last_rec or (datetime.now() - datetime.fromisoformat(last_rec)).total_seconds() > 300
     for symbol in SYMBOLS:
+        sym_short = symbol.replace("USDT","")
+        pm = price_map.get(symbol)
+        if should_record and pm:
+            try:
+                with db_lock:
+                    db_conn.execute("INSERT INTO prices (symbol, price) VALUES (?, ?)", (sym_short, pm["price"]))
+                    db_conn.commit()
+            except: pass
+        sym = symbol.replace("USDT","")
         sym = symbol.replace("USDT","")
         name = SYMBOL_NAMES.get(sym, sym)
         pm = price_map.get(symbol)
