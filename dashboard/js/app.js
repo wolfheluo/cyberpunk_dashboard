@@ -375,11 +375,18 @@ function connectBinanceWS(){
   binanceWS.onclose=function(){setTimeout(connectBinanceWS,5000);};
   binanceWS.onerror=function(){binanceWS.close();};
 }
+var _priceBuffer={};
 function updatePrices(){
   if(!DATA.tickers)return;
   for(var i=0;i<DATA.tickers.length;i++){
-    var p=wsPrices[DATA.tickers[i].id+'USDT'];
-    if(p) DATA.tickers[i].price=p;
+    var sym=DATA.tickers[i].id,p=wsPrices[sym+'USDT'];
+    if(p){
+      DATA.tickers[i].price=p;
+      // Accumulate live price buffer for indicators
+      if(!_priceBuffer[sym])_priceBuffer[sym]=[];
+      _priceBuffer[sym].push(p);
+      if(_priceBuffer[sym].length>100)_priceBuffer[sym].shift();
+    }
   }
   // Re-evaluate strategies on every price update
   if(activeJSStrategy){
@@ -402,8 +409,8 @@ function loadActiveJSStrategy(){
   }).catch(function(){});
 }
 function evaluateJSStrategy(ticker){
-  // Compute indicators
-  var closes=DATA._closes||[],price=ticker.price;
+  // Use live price buffer (from WS) instead of HTTP-polled sparklines
+  var closes=_priceBuffer[ticker.id]||[],price=ticker.price;
   var rsi=calcRSI(closes,14),sma20=calcSMA(closes,20),ema12=calcEMA(closes,12),ema26=calcEMA(closes,26);
   var volSurge=ticker.volume>0;
   try{
@@ -422,7 +429,7 @@ function fetchData(){
   var start=Date.now();
   Promise.all([fetch('/api/data').then(function(r){return r.json();}),fetch('/api/positions').then(function(r){return r.json();}),fetch('/api/trades').then(function(r){return r.json();})])
     .then(function(results){var data=results[0],pos=results[1],trades=results[2],latency=Date.now()-start;
-      for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}if(data.tickers){var cs=[];for(var i=0;i<data.tickers.length;i++){if(data.tickers[i].sparkline)cs=data.tickers[i].sparkline;}if(cs.length)DATA._closes=cs;}DATA.positions=pos.positions||[];DATA.trades=trades.trades||[];DATA.connected=true;DATA.latency_ms=latency;
+      for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}DATA.positions=pos.positions||[];DATA.trades=trades.trades||[];DATA.connected=true;DATA.latency_ms=latency;
       document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
       if(currentPage==='dashboard')R();setTimeout(fetchData,PI);
     }).catch(function(err){document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();setTimeout(fetchData,PI);});
