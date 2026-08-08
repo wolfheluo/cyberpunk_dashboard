@@ -4,7 +4,8 @@
 import os, csv, io, zipfile, urllib.request, time, sqlite3
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quant_fleet.db")
+_BASE = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else os.getcwd()
+DB_PATH = os.path.join(_BASE, "quant_fleet.db")
 INITIAL_CAPITAL = 10_000.0
 DEFAULT_SYMBOLS = [("BTCUSDT","Bitcoin"),("ETHUSDT","Ethereum"),("BNBUSDT","BNB"),
                    ("SOLUSDT","Solana"),("ADAUSDT","Cardano"),("HYPERUSDT","Hyperliquid"),("LINKUSDT","Chainlink")]
@@ -13,7 +14,7 @@ BINANCE_VISION = "https://data.binance.vision/data/spot/monthly/klines"
 HIST_START = (2025, 1)
 HIST_END = (2026, 6)
 HIST_INTERVAL = "1d"
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backtest_data")
+DATA_DIR = os.path.join(_BASE, "backtest_data")
 
 
 def init_db():
