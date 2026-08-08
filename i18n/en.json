@@ -35,6 +35,11 @@
   "signal_wait": "WAIT",
   "vol": "Vol",
   "updated": "Updated",
-  "strategy_code": "# Multi-TF Momentum Strategy (Binance Live)\n# RSI(14) on 1h + SMA crossover on 4h + Volume confirmation\n\nclass MomentumStrategy:\n    \"\"\"\n    BUY  when: RSI(1h) < 45 AND price > SMA(4h,20) AND vol > 1.2× avg\n    SELL when: RSI(1h) > 65 OR price < SMA(4h,20) × 0.98\n    Confidence = weighted_score(RSI:45% + SMA:30% + VOL:25%)\n    \"\"\"\n\n    def evaluate(self, ticker):\n        rsi    = ta.rsi(ticker.klines_1h, 14)\n        sma    = ta.sma(ticker.klines_4h, 20)\n        vol_ok = ticker.volume > ticker.avg_volume * 1.2\n\n        score = self.weighted_score(rsi, sma, vol_ok)\n        return score, self.to_signal(score)",
-  "api_error": "API error"
+  "api_error": "API error",
+  "positions_title": "POSITIONS",
+  "recent_trades": "RECENT TRADES",
+  "long_pos": "LONG",
+  "short_pos": "SHORT",
+  "no_positions": "No open positions",
+  "no_trades": "No trades yet"
 }

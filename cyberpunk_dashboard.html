@@ -30,14 +30,19 @@ body{background:#08090C;color:#c0c8d8;font-family:"JetBrains Mono","Fira Code","
 .lang-btn{background:#1E222D;color:#5A6275;border:1px solid #1E222D;padding:2px 10px;border-radius:3px;font-size:11px;cursor:pointer;transition:all .2s}
 .lang-btn:hover{border-color:#00E5FF;color:#00E5FF}
 .lang-btn.active{background:#00E5FF15;color:#00E5FF;border-color:#00E5FF}
+select.strat-select{background:#1E222D;color:#00E5FF;border:1px solid #1E222D;padding:2px 8px;border-radius:3px;font-size:12px;font-family:inherit;cursor:pointer;outline:none;max-width:220px}
+select.strat-select:hover{border-color:#00E5FF}
+select.strat-select option{background:#0F1117;color:#c0c8d8}
 </style>
 </head>
 <body class="flex flex-col h-screen">
 
 <header class="flex items-center justify-between px-4 py-2 border-b border-[#1E222D] bg-[#0A0C12] shrink-0">
-  <div class="flex items-center gap-6">
+  <div class="flex items-center gap-4">
     <span class="text-[#00E5FF] font-bold text-base tracking-wider glow-cyan" data-i18n="app_title">QUANT FLEET v2.4</span>
-    <span class="text-[#5A6275] text-sm"><span data-i18n="watchlist">// WATCHLIST</span> <span class="text-[#00E5FF]">[<span id="tickerCount">0</span>]</span></span>
+    <select class="strat-select" id="strategySelect" onchange="activateStrategy(this.value)" title="Select strategy">
+      <option value="">Loading...</option>
+    </select>
   </div>
   <div class="flex items-center gap-4 text-sm">
     <button class="lang-btn active" onclick="I18n.setLang('en')" id="btnEN">EN</button>
@@ -56,7 +61,7 @@ body{background:#08090C;color:#c0c8d8;font-family:"JetBrains Mono","Fira Code","
   <section class="flex-1 flex flex-col overflow-hidden">
     <div class="flex border-b border-[#1E222D]" style="height:42%">
       <div class="w-[55%] border-r border-[#1E222D] p-3 overflow-y-auto">
-        <div class="text-sm text-[#5A6275] mb-2" data-i18n="signal_header">TICKER  PRICE  SIGNAL  CONF</div>
+        <div class="text-sm text-[#5A6275] mb-2"><span data-i18n="signal_header">TICKER  PRICE  SIGNAL  CONF</span> <span class="text-[#00E5FF]">[<span id="activeStratLabel">--</span>]</span></div>
         <div class="space-y-0.5 text-sm" id="signalTable"><div class="text-[#5A6275] text-[13px]">--</div></div>
       </div>
       <div class="w-[45%] flex flex-col items-center justify-center p-3">
@@ -74,13 +79,13 @@ body{background:#08090C;color:#c0c8d8;font-family:"JetBrains Mono","Fira Code","
       <div class="flex gap-1 h-[28px]" id="strategyMatrix"><div class="text-[#5A6275] text-[11px] flex items-center" data-i18n="waiting_matrix">Waiting...</div></div>
     </div>
     <div class="border-b border-[#1E222D] p-2" style="height:14%">
-      <div class="text-[12px] text-[#5A6275] mb-1" data-i18n="signal_flow_title">SIGNAL FLOW</div>
-      <canvas id="orderFlowCanvas" width="700" height="46" class="w-full"></canvas>
-      <div class="text-center text-[12px] text-[#00FF66] glow-green mt-0.5" id="executingBanner" data-i18n="executing_banner">[ RUNNING ]</div>
+      <div class="text-[12px] text-[#5A6275] mb-1"><span data-i18n="positions_title">POSITIONS</span> <span class="text-[#00FF66]">— Paper Trading</span></div>
+      <div id="positionsBar" class="flex gap-2 text-[11px] overflow-x-auto" style="max-height:52px"></div>
     </div>
     <div class="flex flex-1 overflow-hidden">
       <div class="w-[62%] border-r border-[#1E222D] p-3 overflow-y-auto">
-        <pre class="text-base leading-relaxed" id="strategyCode"></pre>
+        <div class="text-[12px] text-[#5A6275] mb-2" data-i18n="recent_trades">RECENT TRADES</div>
+        <div class="text-[11px] leading-relaxed space-y-0.5" id="recentTrades"><div class="text-[#5A6275]">No trades yet</div></div>
       </div>
       <div class="w-[38%] p-3 flex flex-col justify-between">
         <div class="space-y-1.5">
@@ -108,76 +113,68 @@ body{background:#08090C;color:#c0c8d8;font-family:"JetBrains Mono","Fira Code","
   <span class="text-[#00E5FF] text-sm"><span class="text-[#5A6275]">&gt;</span> <span id="cliPrompt" data-i18n="cli_prompt">fetching Binance: ...</span> <span class="animate-pulse">|</span></span>
   <span id="tradingPill" class="pill-off" data-i18n="disconnected">DISCONNECTED</span>
 </footer>
-
 <script>
 // ============================================================
-// I18n — loads JSON dictionaries, binds [data-i18n] elements
+// I18n
 // ============================================================
 var I18n = (function(){
-  var _lang = 'en';
-  var _dicts = {};
-  var _ready = false;
-  var _onReady = [];
-
-  function _load(lang){
-    return fetch('/i18n/'+lang+'.json')
-      .then(function(r){return r.json();})
-      .then(function(d){_dicts[lang]=d;return d;});
-  }
-
-  function _t(key, params){
-    var d = _dicts[_lang] || _dicts['en'] || {};
-    var s = d[key] || (_dicts['en']&&_dicts['en'][key]) || key;
-    if(params){for(var k in params){s=s.split('{'+k+'}').join(params[k]);}}
+  var _lang='en',_dicts={},_ready=false,_onReady=[];
+  function _load(lang){return fetch('/i18n/'+lang+'.json').then(function(r){return r.json();}).then(function(d){_dicts[lang]=d;});}
+  function _t(key,params){
+    var d=_dicts[_lang]||_dicts['en']||{},s=d[key]||(_dicts['en']&&_dicts['en'][key])||key;
+    if(params){for(var k in params)s=s.split('{'+k+'}').join(params[k]);}
     return s;
   }
-
   function _bindAll(){
-    var els = document.querySelectorAll('[data-i18n]');
-    for(var i=0;i<els.length;i++){
-      var el=els[i], key=el.getAttribute('data-i18n');
-      if(key) el.textContent = _t(key);
-    }
-    // Strategy code (multiline)
-    var codeEl = document.getElementById('strategyCode');
-    if(codeEl) codeEl.textContent = _t('strategy_code');
-    // cliPrompt
-    var cli = document.getElementById('cliPrompt');
-    if(cli) cli.textContent = _t('cli_prompt');
+    var els=document.querySelectorAll('[data-i18n]');
+    for(var i=0;i<els.length;i++){var el=els[i],key=el.getAttribute('data-i18n');if(key)el.textContent=_t(key);}
   }
-
   function init(){
-    return Promise.all([_load('en'),_load('zh')]).then(function(){
-      _ready=true;_bindAll();
-      _onReady.forEach(function(fn){fn();});
-      _onReady=[];
-    });
+    return Promise.all([_load('en'),_load('zh')]).then(function(){_ready=true;_bindAll();_onReady.forEach(function(fn){fn();});_onReady=[];});
   }
-
   return {
-    init: init,
-    t: _t,
-    setLang: function(lang){
-      _lang=lang;
-      document.getElementById('btnEN').className='lang-btn'+(lang==='en'?' active':'');
-      document.getElementById('btnZH').className='lang-btn'+(lang==='zh'?' active':'');
-      _bindAll();
-      if(typeof renderAll==='function') renderAll();
-    },
-    getLang: function(){return _lang;},
-    ready: function(fn){if(_ready)fn();else _onReady.push(fn);}
+    init:init,t:_t,
+    setLang:function(lang){_lang=lang;document.getElementById('btnEN').className='lang-btn'+(lang==='en'?' active':'');document.getElementById('btnZH').className='lang-btn'+(lang==='zh'?' active':'');_bindAll();if(typeof renderAll==='function')renderAll();},
+    getLang:function(){return _lang;},
+    ready:function(fn){if(_ready)fn();else _onReady.push(fn);}
   };
 })();
 
 // ============================================================
-// DATA STORE
+// DATA
 // ============================================================
-var DATA={connected:false,latency_ms:null,tickers:[],strategy_matrix:{strategies:[],timeframes:[],cells:[]},kpi:{},factors:[],order_flow:{},exec_log:[]};
+var DATA={connected:false,latency_ms:null,tickers:[],strategy_matrix:{strategies:[],timeframes:[],cells:[]},kpi:{},factors:[],exec_log:[],active_strategy:'',positions:[],trades:[]};
+
+// ============================================================
+// STRATEGY SWITCHER
+// ============================================================
+var strategiesList=[],activeStratFile='';
+function loadStrategies(){
+  fetch('/api/strategies').then(function(r){return r.json();}).then(function(d){
+    strategiesList=d.strategies;activeStratFile=d.active;
+    var sel=document.getElementById('strategySelect');sel.innerHTML='';
+    for(var i=0;i<strategiesList.length;i++){
+      var s=strategiesList[i];
+      sel.innerHTML+='<option value="'+s.filename+'"'+(s.filename===d.active?' selected':'')+'>'+s.name+'</option>';
+    }
+    document.getElementById('activeStratLabel').textContent=d.strategies.find(function(s){return s.filename===d.active;})?.name||'--';
+  }).catch(function(e){console.error('Strategies:',e);});
+}
+function activateStrategy(fname){
+  if(!fname||fname===activeStratFile)return;
+  fetch('/api/strategy/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:fname})})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      activeStratFile=d.active;
+      document.getElementById('activeStratLabel').textContent=d.name;
+      var sel=document.getElementById('strategySelect');sel.value=d.active;
+    });
+}
 
 // ============================================================
 // RENDER
 // ============================================================
-function renderAll(){renderConnection();renderTickerRail();renderSignalTable();renderRadar();renderKPIs();renderStrategyMatrix();renderOrderFlow();renderPositions();renderExecLog();}
+function renderAll(){renderConnection();renderTickerRail();renderSignalTable();renderRadar();renderKPIs();renderStrategyMatrix();renderPositionsBar();renderSignalSummary();renderExecLog();renderRecentTrades();}
 
 function renderConnection(){
   document.getElementById('latency').innerHTML=DATA.connected&&DATA.latency_ms!=null?DATA.latency_ms+'ms':'--';
@@ -192,7 +189,6 @@ function renderConnection(){
 
 function renderTickerRail(){
   var rail=document.getElementById('tickerRail');rail.innerHTML='';
-  document.getElementById('tickerCount').textContent=DATA.tickers.length;
   if(!DATA.tickers.length){rail.innerHTML='<div class="text-[#5A6275] text-[13px] p-4">'+I18n.t('no_data')+'</div>';return;}
   DATA.tickers.forEach(function(tk,i){
     var chg=parseFloat(tk.change_pct)||0,sign=chg>=0?'+':'',colorClass=chg>0?'up':chg<0?'down':'neutral';
@@ -202,7 +198,7 @@ function renderTickerRail(){
       '<div class="flex justify-between items-center mb-1">'+
         '<div><span class="text-[#00E5FF] text-[13px] font-bold">'+tk.id+'</span>'+
         '<span class="text-[#5A6275] text-[11px] ml-1.5">'+(tk.name||'')+'</span></div>'+
-        '<span class="text-[#5A6275] text-[12px]">'+I18n.t('vol')+' '+(tk.volume_m!=null?Number(tk.volume_m).toFixed(1)+'M':'--')+'</span>'+
+        '<span class="text-[#5A6275] text-[12px]">Vol '+(tk.volume_m!=null?Number(tk.volume_m).toFixed(1)+'M':'--')+'</span>'+
       '</div>'+
       '<canvas class="w-full sparkline" height="20" data-idx="'+i+'" style="width:100%"></canvas>'+
       '<div class="flex justify-between mt-0.5">'+
@@ -294,19 +290,21 @@ function renderStrategyMatrix(){
   }
 }
 
-function renderOrderFlow(){
-  var ofc=document.getElementById('orderFlowCanvas');ofc.width=ofc.parentElement.clientWidth-16;
-  var octx=ofc.getContext('2d'),ow=ofc.width,oh=ofc.height;octx.clearRect(0,0,ow,oh);
-  var buys=DATA.tickers.filter(function(tk){return tk.signal==='BUY';}).length;
-  var sells=DATA.tickers.filter(function(tk){return tk.signal==='SELL';}).length;
-  var waits=DATA.tickers.filter(function(tk){return tk.signal==='WAIT';}).length;
-  var holds=DATA.tickers.filter(function(tk){return tk.signal==='HOLD'||!tk.signal;}).length;
-  octx.fillStyle='#5A6275';octx.font='10px monospace';octx.textAlign='center';
-  octx.fillText('BUY: '+buys+'  |  SELL: '+sells+'  |  WAIT: '+waits+'  |  HOLD: '+holds+'  |  TOTAL: '+DATA.tickers.length,ow/2,oh/2+4);
-  octx.textAlign='start';
+function renderPositionsBar(){
+  var pb=document.getElementById('positionsBar');pb.innerHTML='';
+  if(!DATA.positions||!DATA.positions.length){pb.innerHTML='<span class="text-[#5A6275]">No open positions</span>';return;}
+  for(var i=0;i<DATA.positions.length;i++){
+    var p=DATA.positions[i],pnl=p.unrealized_pnl||0;
+    var pnlColor=pnl>=0?'text-[#00FF66]':'text-[#FF2A6D]',pnlSign=pnl>=0?'+':'';
+    pb.innerHTML+='<span class="text-[#00E5FF]">'+p.symbol+'</span>'+
+      '<span class="'+(p.side==='BUY'?'text-[#00FF66]':'text-[#FF2A6D]')+'">'+p.side+'</span>'+
+      '<span class="text-[#5A6275]">@$'+Number(p.entry_price).toFixed(p.entry_price<1?4:2)+'</span>'+
+      '<span class="'+pnlColor+'">'+pnlSign+'$'+Math.abs(pnl).toFixed(2)+'</span>'+
+      '<span class="text-[#5A6275] mx-2">|</span>';
+  }
 }
 
-function renderPositions(){
+function renderSignalSummary(){
   var buys=DATA.tickers.filter(function(tk){return tk.signal==='BUY';});
   var sells=DATA.tickers.filter(function(tk){return tk.signal==='SELL';});
   var waits=DATA.tickers.filter(function(tk){return tk.signal==='WAIT';});
@@ -316,16 +314,30 @@ function renderPositions(){
   document.getElementById('posShort').textContent=fmt(sells);
   document.getElementById('posFlat').textContent=fmt(waits);
   document.getElementById('posPending').textContent=fmt(others);
-  var pb=document.getElementById('posBar'),pctx=pb.getContext('2d'),w=pb.width,h=pb.height;pctx.clearRect(0,0,w,h);
+  var pbc=document.getElementById('posBar'),pctx=pbc.getContext('2d'),w=pbc.width,h=pbc.height;pctx.clearRect(0,0,w,h);
   var total=DATA.tickers.length||1;
   var segs=[{pct:buys.length/total,color:'#00FF66'},{pct:sells.length/total,color:'#FF2A6D'},{pct:waits.length/total,color:'#FFCC00'},{pct:others.length/total,color:'#5A6275'}];
   var sx=0;for(var s=0;s<segs.length;s++){var sw=w*segs[s].pct;pctx.fillStyle=segs[s].color;pctx.fillRect(sx,0,sw,h);sx+=sw;}
 }
 
+function renderRecentTrades(){
+  var el=document.getElementById('recentTrades');el.innerHTML='';
+  if(!DATA.trades||!DATA.trades.length){el.innerHTML='<div class="text-[#5A6275]">No trades yet</div>';return;}
+  for(var i=0;i<Math.min(DATA.trades.length,20);i++){
+    var t=DATA.trades[i],sideColor=t.side==='BUY'?'text-[#00FF66]':'text-[#FF2A6D]';
+    el.innerHTML+='<div class="flex gap-3 border-b border-[#1E222D30] py-0.5">'+
+      '<span class="text-[#5A6275] w-16">'+(t.created_at||'').slice(11,19)+'</span>'+
+      '<span class="text-[#00E5FF] w-14">'+t.symbol+'</span>'+
+      '<span class="'+sideColor+' w-8">'+t.side+'</span>'+
+      '<span class="text-[#5A6275]">$'+Number(t.price).toFixed(t.price<1?4:2)+' x'+t.quantity+'</span>'+
+      '<span class="text-[#5A6275] ml-auto">'+t.status+'</span></div>';
+  }
+}
+
 function renderExecLog(){
   var el=document.getElementById('execLog');el.innerHTML='';
   if(!DATA.exec_log.length){el.innerHTML='<div class="text-[#5A6275] py-px">'+I18n.t('awaiting_feed')+'</div>';return;}
-  for(var i=Math.max(0,DATA.exec_log.length-50);i<DATA.exec_log.length;i++){var e=DATA.exec_log[i];var div=document.createElement('div');div.className='py-px';div.innerHTML=e.html||e.ts+' '+e.type;el.appendChild(div);}
+  for(var i=Math.max(0,DATA.exec_log.length-50);i<DATA.exec_log.length;i++){var e=DATA.exec_log[i];var div=document.createElement('div');div.className='py-px';div.innerHTML=e.html||'';el.appendChild(div);}
   el.parentElement.scrollTop=el.parentElement.scrollHeight;
 }
 
@@ -335,9 +347,15 @@ function renderExecLog(){
 var POLL_INTERVAL=5000;
 function fetchData(){
   var start=Date.now();
-  fetch('/api/data').then(function(r){return r.json();}).then(function(data){
+  Promise.all([
+    fetch('/api/data').then(function(r){return r.json();}),
+    fetch('/api/positions').then(function(r){return r.json();}),
+    fetch('/api/trades').then(function(r){return r.json();})
+  ]).then(function(results){
+    var data=results[0],posData=results[1],tradeData=results[2];
     var latency=Date.now()-start;
     for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}
+    DATA.positions=posData.positions||[];DATA.trades=tradeData.trades||[];
     DATA.connected=true;DATA.latency_ms=latency;
     document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';
     document.getElementById('statusBar').className='text-[#00FF66]';
@@ -352,12 +370,13 @@ function fetchData(){
 }
 
 // ============================================================
-// BOOT: load i18n → render shell → start polling
+// BOOT
 // ============================================================
 renderAll();
 I18n.init().then(function(){
-  renderAll();  // re-render with translated text
-  fetchData();  // start data polling
+  loadStrategies();
+  renderAll();
+  fetchData();
 });
 </script>
 </body>

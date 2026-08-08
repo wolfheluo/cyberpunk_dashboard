@@ -35,6 +35,11 @@
   "signal_wait": "觀望",
   "vol": "量",
   "updated": "更新於",
-  "strategy_code": "# 多時間框架動能策略 (Binance 即時)\n# RSI(14) 1h + SMA 交叉 4h + 成交量確認\n\nclass MomentumStrategy:\n    \"\"\"\n    BUY  條件: RSI(1h) < 45 AND price > SMA(4h,20) AND vol > 1.2× 均量\n    SELL 條件: RSI(1h) > 65 OR price < SMA(4h,20) × 0.98\n    信心度 = 加權評分(RSI:45% + SMA:30% + VOL:25%)\n    \"\"\"\n\n    def evaluate(self, ticker):\n        rsi    = ta.rsi(ticker.klines_1h, 14)\n        sma    = ta.sma(ticker.klines_4h, 20)\n        vol_ok = ticker.volume > ticker.avg_volume * 1.2\n\n        score = self.weighted_score(rsi, sma, vol_ok)\n        return score, self.to_signal(score)",
-  "api_error": "API 錯誤"
+  "api_error": "API 錯誤",
+  "positions_title": "持倉",
+  "recent_trades": "近期交易",
+  "long_pos": "多頭",
+  "short_pos": "空頭",
+  "no_positions": "無持倉",
+  "no_trades": "尚無交易"
 }
