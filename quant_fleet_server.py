@@ -9,13 +9,11 @@ import sqlite3
 import importlib.util
 import urllib.request
 import threading
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from init_db import init_db, DB_PATH, INITIAL_CAPITAL
 
-TZ = timezone(timedelta(hours=8))  # UTC+8
-
 def now_ts(fmt="%H:%M:%S"):
-    return datetime.now(TZ).strftime(fmt)
+    return datetime.now().strftime(fmt)
 
 # ============================================================
 # CONFIG
@@ -137,7 +135,7 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None):
 
         # Update cash
         cash_change = -notional if side == "BUY" else notional
-        db_conn.execute("UPDATE portfolio SET cash=cash+?, updated_at=datetime('now') WHERE id=1",
+        db_conn.execute("UPDATE portfolio SET cash=cash+?, updated_at=datetime('now', '+8 hours') WHERE id=1",
                         (cash_change,))
 
         # Update position
@@ -146,7 +144,7 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None):
             if existing:
                 new_qty = existing[1] + quantity
                 avg_entry = (existing[2]*existing[1] + price*quantity) / new_qty
-                db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now') WHERE symbol=?",
+                db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
                                (new_qty, avg_entry, price, (price-avg_entry)*new_qty, symbol))
             else:
                 db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
@@ -174,7 +172,7 @@ def fetch_all_data():
 
     strat = get_active_strategy()
     strategy_name = strat["name"] if strat else "none"
-    result = {"tickers":[], "exec_log":[], "timestamp":datetime.now(timezone.utc).isoformat()}
+    result = {"tickers":[], "exec_log":[], "timestamp":datetime.now().isoformat()}
 
     # Get current portfolio
     with db_lock:
@@ -512,7 +510,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200,r if r else {"error":"Insufficient funds or no position"})
         elif self.path=="/api/reset":
             with db_lock:
-                db_conn.executescript("DELETE FROM trades; DELETE FROM positions; DELETE FROM signals; UPDATE portfolio SET cash=?,updated_at=datetime('now') WHERE id=1"%(INITIAL_CAPITAL,))
+                db_conn.executescript("DELETE FROM trades; DELETE FROM positions; DELETE FROM signals; UPDATE portfolio SET cash=?,updated_at=datetime('now', '+8 hours') WHERE id=1"%(INITIAL_CAPITAL,))
                 db_conn.commit()
             with log_lock: exec_log.clear()
             self._json(200,{"status":"reset","capital":INITIAL_CAPITAL})

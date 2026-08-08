@@ -27,28 +27,28 @@ def init_db():
             id INTEGER PRIMARY KEY CHECK(id=1),
             cash REAL NOT NULL,
             initial_capital REAL NOT NULL,
-            updated_at TEXT DEFAULT (datetime('now'))
+            updated_at TEXT DEFAULT (datetime('now', '+8 hours'))
         );
         CREATE TABLE IF NOT EXISTS signals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT NOT NULL, signal TEXT NOT NULL, confidence INTEGER,
             price REAL, factors_json TEXT, strategy TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT (datetime('now', '+8 hours'))
         );
         CREATE TABLE IF NOT EXISTS trades (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT NOT NULL, side TEXT NOT NULL, price REAL NOT NULL,
             quantity REAL NOT NULL, notional REAL NOT NULL,
             status TEXT DEFAULT 'filled', strategy TEXT, signal_id INTEGER,
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT (datetime('now', '+8 hours'))
         );
         CREATE TABLE IF NOT EXISTS positions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT NOT NULL UNIQUE, side TEXT NOT NULL,
             entry_price REAL NOT NULL, quantity REAL NOT NULL,
             current_price REAL, unrealized_pnl REAL DEFAULT 0,
-            strategy TEXT, opened_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
+            strategy TEXT, opened_at TEXT DEFAULT (datetime('now', '+8 hours')),
+            updated_at TEXT DEFAULT (datetime('now', '+8 hours'))
         );
         CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at);
         CREATE INDEX IF NOT EXISTS idx_trades_created ON trades(created_at);
@@ -62,7 +62,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS watchlist (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
-            added_at TEXT DEFAULT (datetime('now'))
+            added_at TEXT DEFAULT (datetime('now', '+8 hours'))
         );
     """)
     if not conn.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0]:
