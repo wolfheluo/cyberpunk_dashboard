@@ -270,20 +270,20 @@ var tickers=createTickers();
 // ---- TICKER RAIL (Left) ----
 function buildTickerRail(){
   var rail=document.getElementById('tickerRail');rail.innerHTML='';
-  tickers.forEach(function(t,i){
-    var chg=parseFloat(t.change),sign=chg>=0?'+':'',colorClass=chg>=0?'up':'down';
+  tickers.forEach(function(tk,i){
+    var chg=parseFloat(tk.change),sign=chg>=0?'+':'',colorClass=chg>=0?'up':'down';
     var card=document.createElement('div');
     card.className='panel p-2 cursor-pointer hover:border-[#00E5FF40] transition-colors';
     card.innerHTML=
       '<div class="flex justify-between items-center mb-1">'+
-        '<div><span class="text-[#00E5FF] text-[13px] font-bold">'+t.id+'</span>'+
-        '<span class="text-[#5A6275] text-[11px] ml-1.5">'+t.name+'</span></div>'+
-        '<span class="text-[#5A6275] text-[12px]">'+t('vol')+' '+t.volume+'M</span>'+
+        '<div><span class="text-[#00E5FF] text-[13px] font-bold">'+tk.id+'</span>'+
+        '<span class="text-[#5A6275] text-[11px] ml-1.5">'+tk.name+'</span></div>'+
+        '<span class="text-[#5A6275] text-[12px]">'+t('vol')+' '+tk.volume+'M</span>'+
       '</div>'+
-      '<canvas class="w-full" height="20" data-ticker="'+t.id+'" style="width:100%"></canvas>'+
+      '<canvas class="w-full" height="20" data-ticker="'+tk.id+'" style="width:100%"></canvas>'+
       '<div class="flex justify-between mt-0.5">'+
-        '<span class="text-[14px]">$'+t.price.toFixed(2)+'</span>'+
-        '<span class="'+colorClass+' text-[12px]">'+sign+t.change+' ('+sign+t.changePct+'%)</span>'+
+        '<span class="text-[14px]">$'+tk.price.toFixed(2)+'</span>'+
+        '<span class="'+colorClass+' text-[12px]">'+sign+tk.change+' ('+sign+tk.changePct+'%)</span>'+
       '</div>';
     rail.appendChild(card);
   });
@@ -308,15 +308,15 @@ buildTickerRail();
 // ---- SIGNAL TABLE ----
 function buildSignalTable(){
   var st=document.getElementById('signalTable');st.innerHTML='';
-  tickers.forEach(function(t){
-    var sigKey='signal_'+t.signal.toLowerCase(),sigText=t(sigKey);
-    var b=t.signal==='BUY'?'badge-green':t.signal==='SELL'?'badge-red':t.signal==='WAIT'?'badge-yellow':'badge-cyan';
-    var chg=parseFloat(t.change),ps=chg>=0?'up':'down';
+  tickers.forEach(function(tk){
+    var sigKey='signal_'+tk.signal.toLowerCase(),sigText=t(sigKey);
+    var b=tk.signal==='BUY'?'badge-green':tk.signal==='SELL'?'badge-red':tk.signal==='WAIT'?'badge-yellow':'badge-cyan';
+    var chg=parseFloat(tk.change),ps=chg>=0?'up':'down';
     st.innerHTML+='<div class="flex items-center gap-3 py-0.5 border-b border-[#1E222D40]">'+
-      '<span class="text-[#00E5FF] w-12">'+t.id+'</span>'+
-      '<span class="'+ps+' w-20 text-right">$'+t.price.toFixed(2)+'</span>'+
+      '<span class="text-[#00E5FF] w-12">'+tk.id+'</span>'+
+      '<span class="'+ps+' w-20 text-right">$'+tk.price.toFixed(2)+'</span>'+
       '<span class="'+b+'">'+sigText+'</span>'+
-      '<span class="text-[#5A6275] text-[12px] ml-auto">'+t.confidence+'%</span></div>';
+      '<span class="text-[#5A6275] text-[12px] ml-auto">'+tk.confidence+'%</span></div>';
   });
 }
 buildSignalTable();
