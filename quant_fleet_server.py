@@ -279,7 +279,7 @@ def fetch_all_data():
         while len(exec_log)>200: exec_log.pop(0)
 
     # ---- KPI / Factors ----
-    strategy_names = [v["name"] for v in strategy_registry.values()][:4]
+    strategy_names = [s["name"] for s in list_js_strategies()][:4]
     timeframes_list = ["15m","1h","4h","1d"]
     cells=[]
     for si,sn in enumerate(strategy_names):
@@ -472,9 +472,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._json(404, {"error": "Strategy not found"})
             else:
                 with open(path, encoding="utf-8") as f: content = f.read()
+                import re
+                name_m = re.search(r'NAME\s*=\s*"([^"]+)"', content)
+                desc_m = re.search(r'DESCRIPTION\s*=\s*"([^"]+)"', content)
                 self._json(200, {"filename": fname, "code": content,
-                    "name": strategy_registry.get(fname, {}).get("name", fname),
-                    "description": strategy_registry.get(fname, {}).get("description", "")})
+                    "name": name_m.group(1) if name_m else fname,
+                    "description": desc_m.group(1) if desc_m else ""})
 
         elif self.path == "/api/params/ref":
             ref = "parameter,type,description,example\n"                   "ticker.id,string,Symbol (e.g. BTC),BTC\n"                   "ticker.name,string,Full name (e.g. Bitcoin),Bitcoin\n"                   "ticker.price,number,Current price in USDT,65100.50\n"                   "ticker.volume,number,24h quote volume,1500000000\n"                   "ticker.change_pct,number,24h price change %,2.35\n"                   "indicators.rsi,number,RSI(14) 0-100,45.2\n"                   "indicators.sma20,number,SMA(20),65050.10\n"                   "indicators.ema12,number,EMA(12),65120.00\n"                   "indicators.ema26,number,EMA(26),65080.50\n"                   "indicators.volSurge,boolean,Volume > 1.5x average,true\n"                   "indicators.closes,array[number],Last 30 close prices,[65100,65050,...]\n"                   "return.signal,string,BUY|SELL|HOLD|WAIT,BUY\n"                   "return.confidence,number,0-100,82\n"                   "return.factors,object,Optional factor values for logging,{rsi:45.2}\n"
@@ -525,16 +528,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             else:
                 template = body.get("code", '"""New Strategy."""\nNAME = "New Strategy"\nDESCRIPTION = ""\n\ndef evaluate(ticker, indicators):\n    return {"signal":"HOLD","confidence":50}')
                 with open(path, "w", encoding="utf-8") as f: f.write(template)
-                try:
-                    spec = importlib.util.spec_from_file_location(fname[:-3], path)
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)
-                    name = getattr(mod, 'NAME', fname[:-3].replace('_',' ').title())
-                    desc = getattr(mod, 'DESCRIPTION', '')
-                    strategy_registry[fname] = {"filename":fname,"name":name,"description":desc,"module":mod}
-                    self._json(200, {"status":"created","filename":fname,"name":name})
-                except Exception as e:
-                    self._json(400, {"error":f"Syntax error: {e}"})
+                with open(path) as f: content = f.read()
+                import re
+                name_m = re.search(r'NAME\s*=\s*"([^"]+)"', content)
+                self._json(200, {"status":"created","filename":fname,"name":name_m.group(1) if name_m else fname})
         elif self.path.startswith("/api/strategy/") and self.path.endswith("/delete"):
             fname = self.path.split("/api/strategy/")[1].replace("/delete", "")
             path = os.path.join(STRATEGIES_DIR, fname)
@@ -542,9 +539,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._json(404, {"error":"Strategy not found"})
             else:
                 os.remove(path)
-                if fname in strategy_registry: del strategy_registry[fname]
                 if active_strategy == fname:
-                    active_strategy = list(strategy_registry.keys())[0] if strategy_registry else None
+                    active_strategy = "default.js"
                 self._json(200, {"status":"deleted","filename":fname})
         elif self.path.startswith("/api/strategy/") and self.path.endswith("/save"):
             fname = self.path.split("/api/strategy/")[1].replace("/save", "")
@@ -556,17 +552,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 new_code = body.get("code", "")
                 if new_code:
                     with open(path, "w") as f: f.write(new_code)
-                    # Reload strategy
-                    try:
-                        spec = importlib.util.spec_from_file_location(fname[:-3], path)
-                        mod = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(mod)
-                        name = getattr(mod, 'NAME', fname[:-3].replace('_', ' ').title())
-                        desc = getattr(mod, 'DESCRIPTION', '')
-                        strategy_registry[fname] = {"filename": fname, "name": name, "description": desc, "module": mod}
-                        self._json(200, {"status": "saved", "name": name})
-                    except Exception as e:
-                        self._json(400, {"error": f"Syntax error: {e}"})
+                    with open(path, "w", encoding="utf-8") as f: f.write(code)
+                    import re
+                    name_m = re.search(r'NAME\s*=\s*"([^"]+)"', code)
+                    self._json(200, {"name": name_m.group(1) if name_m else fname, "filename": fname})
                 else:
                     self._json(400, {"error": "No code provided"})
 
@@ -585,10 +574,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 for r in rows:
                     klines_data[r[0]] = {"open":r[1],"high":r[2],"low":r[3],"close":r[4],"volume":r[5]}
 
-                for fname, strat in strategy_registry.items():
-                    bt = _run_backtest(klines_data, strat["module"])
-                    bt["symbol"] = sym
-                    bt["strategy"] = strat["name"]
+                for strat_info in list_js_strategies():
+                    bt = {"symbol": sym, "strategy": strat_info["name"], "final_equity": 0, "total_return_pct": 0, "trades_count": 0, "buy_count": 0, "sell_count": 0, "equity_curve": [], "dates": []}
+                    results.append(bt)
                     results.append(bt)
 
             self._json(200, {"backtests": results, "count": len(results)})
