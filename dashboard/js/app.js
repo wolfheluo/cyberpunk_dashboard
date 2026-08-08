@@ -97,7 +97,7 @@ function saveStrategy(){
             var s=evaluateJSStrategy(DATA.tickers[i]);
             DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;
           }
-          if(currentPage==='dashboard')R();
+          if(currentPage==='dashboard')R(false);
         }
       }
     });
@@ -205,7 +205,7 @@ function drawBTCanvas(){
 // ============================================================
 // DASHBOARD RENDER
 // ============================================================
-function R(){renderConnection();renderTickerRail();renderSignalTable();renderRadar();renderKPIs();renderPositionsBar();renderPipeline(0);if(!pipeAnimId)animatePipeline();renderSignalSummary();renderExecLog();renderRecentTrades();}
+function R(full){renderConnection();if(full!==false)renderTickerRail();renderSignalTable();renderRadar();renderKPIs();renderPositionsBar();renderPipeline(0);if(!pipeAnimId)animatePipeline();renderSignalSummary();renderExecLog();renderRecentTrades();}
 
 function renderConnection(){
   document.getElementById('latency').innerHTML=DATA.connected&&DATA.latency_ms!=null?DATA.latency_ms+'ms':'--';
@@ -388,6 +388,14 @@ function updatePrices(){
       if(_priceBuffer[sym].length>100)_priceBuffer[sym].shift();
     }
   }
+  // Update price DOM directly without redrawing whole rail
+  var cards=document.querySelectorAll('#tickerRail .panel');
+  for(var i=0;i<cards.length;i++){
+    var tk=DATA.tickers[i],spans=cards[i].querySelectorAll('span');
+    if(spans.length>=2){
+      spans[spans.length-2].textContent='$'+Number(tk.price).toFixed(tk.price<1?4:2);
+    }
+  }
   // Re-evaluate strategies on every price update
   if(activeJSStrategy){
     for(var i=0;i<DATA.tickers.length;i++){
@@ -395,7 +403,7 @@ function updatePrices(){
       DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;
     }
   }
-  if(currentPage==='dashboard')R();
+  if(currentPage==='dashboard')R(false);
 }
 
 // ============================================================
@@ -431,7 +439,7 @@ function fetchData(){
     .then(function(results){var data=results[0],pos=results[1],trades=results[2],latency=Date.now()-start;
       for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}DATA.positions=pos.positions||[];DATA.trades=trades.trades||[];DATA.connected=true;DATA.latency_ms=latency;
       document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
-      if(currentPage==='dashboard')R();setTimeout(fetchData,PI);
+      if(currentPage==='dashboard')R(false);setTimeout(fetchData,PI);
     }).catch(function(err){document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();setTimeout(fetchData,PI);});
 }
 
