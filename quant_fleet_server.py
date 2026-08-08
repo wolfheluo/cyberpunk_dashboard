@@ -491,6 +491,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 })
             self._json(200, {"backtests": results})
 
+        elif self.path == "/api/params/ref":
+            ref = "parameter,type,description,example\n"                   "ticker.id,str,Ticker symbol (e.g. BTC),BTC\n"                   "ticker.name,str,Full name (e.g. Bitcoin),Bitcoin\n"                   "ticker.price,float,Current price in USDT,65100.50\n"                   "ticker.volume,float,24h quote volume in USDT,1500000000\n"                   "indicators.rsi_1h,float,RSI(14) on 1h closes (0-100),45.2\n"                   "indicators.sma_4h,float,SMA(20) on 4h closes,64800.30\n"                   "indicators.sma_1h_20,float,SMA(20) on 1h closes,65050.10\n"                   "indicators.ema_12,float,EMA(12) on 1h closes,65120.00\n"                   "indicators.ema_26,float,EMA(26) on 1h closes,65080.50\n"                   "indicators.vol_surge,bool,Volume > 1.2x average,True\n"                   "indicators.closes_1h,list[float],Last 30 1h close prices,[65100,65050,...]\n"                   "indicators.closes_4h,list[float],Last 30 4h close prices,[64800,64750,...]\n"                   "return.signal,str,BUY|SELL|HOLD|WAIT,BUY\n"                   "return.confidence,int,Signal confidence 0-100,82\n"                   "return.factors,dict,Optional factor values for logging,{'rsi':45.2}\n"
+            body = ref.encode()
+            self.send_response(200)
+            self.send_header("Content-Type","text/csv; charset=utf-8")
+            self.send_header("Content-Disposition","attachment; filename=strategy_params.csv")
+            self.send_header("Content-Length",str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         else:
             super().do_GET()
 
