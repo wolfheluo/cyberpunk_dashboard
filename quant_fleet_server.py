@@ -445,20 +445,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if self.command == "GET":
                 rows = db_conn.execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()
                 self._json(200, {"symbols":[{"id":r[0],"symbol":r[1],"name":r[2]} for r in rows]})
-        elif self.path == "/api/symbols/add" and self.command == "POST":
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
-            sym = body.get("symbol","").upper().strip()
-            name = body.get("name", sym.replace("USDT",""))
-            if not sym or not sym.endswith("USDT"):
-                self._json(400, {"error":"Symbol must end with USDT (e.g. DOGEUSDT)"}); return
-            db_conn.execute("INSERT OR IGNORE INTO watchlist (symbol,name) VALUES (?,?)", (sym,name))
-            db_conn.commit(); reload_symbols()
-            self._json(200, {"status":"added","symbol":sym,"name":name})
-        elif self.path.startswith("/api/symbols/") and self.command == "DELETE":
-            sym = self.path.split("/api/symbols/")[1].upper()
-            db_conn.execute("DELETE FROM watchlist WHERE symbol=?", (sym,))
-            db_conn.commit(); reload_symbols()
-            self._json(200, {"status":"deleted","symbol":sym})
         elif self.path.startswith("/dashboard/i18n/") or self.path.startswith("/i18n/"):
             fname = self.path.replace("/dashboard/i18n/", "").replace("/i18n/", "")
             path = os.path.join(_BASE, "dashboard", "i18n", fname)
@@ -594,8 +580,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             self._json(200, {"backtests": results, "count": len(results)})
 
+        elif self.path == "/api/symbols/add":
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
+            sym = body.get("symbol","").upper().strip()
+            name = body.get("name", sym.replace("USDT",""))
+            if not sym or not sym.endswith("USDT"):
+                self._json(400, {"error":"Symbol must end with USDT (e.g. DOGEUSDT)"}); return
+            db_conn.execute("INSERT OR IGNORE INTO watchlist (symbol,name) VALUES (?,?)", (sym,name))
+            db_conn.commit(); reload_symbols()
+            self._json(200, {"status":"added","symbol":sym,"name":name})
         else:
             self.send_error(404)
+
+    def do_DELETE(self):
+        if self.path.startswith("/api/symbols/"):
+            sym = self.path.split("/api/symbols/")[1].upper()
+            db_conn.execute("DELETE FROM watchlist WHERE symbol=?", (sym,))
+            db_conn.commit(); reload_symbols()
+            self._json(200, {"status":"deleted","symbol":sym})
+        else:
+            self.send_error(405)
 
     def _json(self,code,data):
         body=json.dumps(data).encode()
