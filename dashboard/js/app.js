@@ -268,23 +268,22 @@ function spawnPipeOrb(path,label){
   pipeOrbs.push({path:path,t:(pipeOrbs.length%3)*0.4,done:false,doneAge:0,label:label||''});
   if(pipeOrbs.length>40)pipeOrbs.shift();
 }
-// One orb per symbol per scan: the orb travels SIGNAL→WAIT when the strategy
-// held, or SIGNAL→RISK→…→DONE/REJECT/FAIL based on the trade outcome.
+// One orb per server scan (1/s): the orb's path reflects the scan's main
+// outcome — SIGNAL→WAIT when nothing fired, or SIGNAL→RISK→…→DONE/REJECT/FAIL
+// when trades were attempted. Priority: filled > failed > rejected > hold.
 function spawnOrbsFromData(){
-  var res={};
-  for(var i=0;i<DATA.executed.length;i++)res[DATA.executed[i].symbol]='exec';
-  for(var i=0;i<DATA.rejected.length;i++)res[DATA.rejected[i].symbol]='reject';
-  for(var i=0;i<DATA.failed.length;i++)res[DATA.failed[i].symbol]='fail';
-  for(var i=0;i<DATA.tickers.length;i++){
-    var t=DATA.tickers[i];
-    var path;
-    if(t.signal==='BUY'||t.signal==='SELL'){
-      path=res[t.id]||'reject'; // server guarantees an event per signal; be safe
-    }else{
-      path='wait';
-    }
-    spawnPipeOrb(path,t.id+' '+(t.signal||''));
+  var path='wait',label='';
+  if(DATA.executed.length>0){
+    path='exec';
+    label=DATA.executed[0].symbol+' '+(DATA.executed[0].side||'');
+  }else if(DATA.failed.length>0){
+    path='fail';
+    label=DATA.failed[0].symbol+' '+(DATA.failed[0].side||'');
+  }else if(DATA.rejected.length>0){
+    path='reject';
+    label=DATA.rejected[0].symbol+' '+(DATA.rejected[0].side||'');
   }
+  spawnPipeOrb(path,label);
 }
 function renderPipeline(pulse){
   var c=document.getElementById('pipelineCanvas');if(!c)return;
