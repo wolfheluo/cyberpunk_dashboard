@@ -26,7 +26,7 @@ def reload_symbols():
 BINANCE_BASE = "https://api.binance.com"
 _BASE = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else os.getcwd()
 STRATEGIES_DIR = os.path.join(_BASE, "strategies")
-HTML_PATH = os.path.join(_BASE, "cyberpunk_dashboard.html")
+HTML_PATH = os.path.join(_BASE, "dashboard", "cyberpunk_dashboard.html")
 TRADE_SIZE_PCT = 0.05
 
 # ============================================================
@@ -453,7 +453,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200, {"status":"deleted","symbol":sym})
         elif self.path.startswith("/i18n/"):
             fname = self.path.replace("/i18n/", "")
-            path = os.path.join(_BASE, "i18n", fname)
+            path = os.path.join(_BASE, "dashboard", "i18n", fname)
             if os.path.isfile(path):
                 with open(path, "rb") as f: content = f.read()
                 self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
