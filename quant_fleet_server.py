@@ -10,7 +10,7 @@ import importlib.util
 import urllib.request
 import threading
 from datetime import datetime, timezone, timedelta
-from init_db import init_db, DB_PATH, INITIAL_CAPITAL, DEFAULT_SYMBOLS
+from init_db import init_db, DB_PATH, INITIAL_CAPITAL
 
 TZ = timezone(timedelta(hours=8))  # UTC+8
 
@@ -20,8 +20,6 @@ def now_ts(fmt="%H:%M:%S"):
 # ============================================================
 # CONFIG
 # ============================================================
-DEFAULT_SYMBOLS = [("BTCUSDT","Bitcoin"),("ETHUSDT","Ethereum"),("BNBUSDT","BNB"),
-                  ("SOLUSDT","Solana"),("ADAUSDT","Cardano"),("HYPERUSDT","Hyperliquid"),("LINKUSDT","Chainlink")]
 SYMBOLS, SYMBOL_NAMES = [], []
 def reload_symbols():
     global SYMBOLS, SYMBOL_NAMES
