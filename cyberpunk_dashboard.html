@@ -611,7 +611,7 @@ function loadSymbols(){
   fetch('/api/symbols').then(function(r){return r.json();}).then(function(d){
     var el=document.getElementById('symbolList');el.innerHTML='';
     d.symbols.forEach(function(s){
-      el.innerHTML+='<div class="flex items-center justify-between py-0.5 border-b border-[#1E222D20]"><span class="text-[#00E5FF]">'+s.symbol+'</span><span class="text-[#5A6275]">'+s.name+'</span><button class="btn-sm danger" data-sym="'+s.symbol+'" onclick="removeSymbol(this.getAttribute('data-sym'))">✕</button></div>';
+      el.innerHTML+='<div class="flex items-center justify-between py-0.5 border-b border-[#1E222D20]"><span class="text-[#00E5FF]">'+s.symbol+'</span><span class="text-[#5A6275]">'+s.name+'</span><button class="btn-sm danger" onclick="removeSymbol(this)" data-sym="'+s.symbol+'">✕</button></div>';
     });
   });
 }
@@ -624,7 +624,8 @@ function addSymbol(){
       if(d.error)alert(d.error);else{document.getElementById('newSymbol').value='';document.getElementById('newSymbolName').value='';loadSymbols();}
     });
 }
-function removeSymbol(sym){
+function removeSymbol(el){
+  var sym=el.getAttribute('data-sym');
   if(!confirm('Remove '+sym+'?'))return;
   fetch('/api/symbols/'+sym,{method:'DELETE'}).then(function(){loadSymbols();});
 }
