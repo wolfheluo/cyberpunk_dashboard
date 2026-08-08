@@ -19,8 +19,14 @@ def now_ts(fmt="%H:%M:%S"):
 # ============================================================
 # CONFIG
 # ============================================================
-SYMBOLS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","ADAUSDT","HYPERUSDT","LINKUSDT"]
-SYMBOL_NAMES = {"BTC":"Bitcoin","ETH":"Ethereum","BNB":"BNB","SOL":"Solana","ADA":"Cardano","HYPER":"Hyperliquid","LINK":"Chainlink"}
+DEFAULT_SYMBOLS = [("BTCUSDT","Bitcoin"),("ETHUSDT","Ethereum"),("BNBUSDT","BNB"),
+                  ("SOLUSDT","Solana"),("ADAUSDT","Cardano"),("HYPERUSDT","Hyperliquid"),("LINKUSDT","Chainlink")]
+SYMBOLS, SYMBOL_NAMES = [], []
+def reload_symbols():
+    global SYMBOLS, SYMBOL_NAMES
+    rows = db_conn.execute("SELECT symbol,name FROM watchlist ORDER BY id").fetchall()
+    SYMBOLS = [r[0] for r in rows]
+    SYMBOL_NAMES = {r[0].replace("USDT",""): r[1] for r in rows}
 BINANCE_BASE = "https://api.binance.com"
 DB_PATH = "/root/quant_fleet.db"
 STRATEGIES_DIR = "/root/strategies"
@@ -86,7 +92,16 @@ def init_db():
             UNIQUE(symbol, date)
         );
         CREATE INDEX IF NOT EXISTS idx_klines_symbol ON historical_klines(symbol);
+        CREATE TABLE IF NOT EXISTS watchlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            added_at TEXT DEFAULT (datetime('now'))
+        );
     """)
+    if not conn.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0]:
+        conn.executemany("INSERT INTO watchlist (symbol,name) VALUES (?,?)", DEFAULT_SYMBOLS)
+        conn.commit()
     # Init portfolio if empty
     row = conn.execute("SELECT id FROM portfolio WHERE id=1").fetchone()
     if not row:
@@ -96,6 +111,7 @@ def init_db():
     return conn
 
 db_conn = init_db()
+reload_symbols()
 db_lock = threading.Lock()
 exec_log = []
 log_lock = threading.Lock()
@@ -496,6 +512,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             pf = db_conn.execute("SELECT cash,initial_capital FROM portfolio WHERE id=1").fetchone()
             pos_val = sum(r[2]*(r[0] or r[2]) for r in db_conn.execute("SELECT current_price,entry_price,quantity FROM positions").fetchall())
             self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,"total_equity":pf[0]+pos_val})
+        elif self.path == "/api/symbols":
+            if self.command == "GET":
+                rows = db_conn.execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()
+                self._json(200, {"symbols":[{"id":r[0],"symbol":r[1],"name":r[2]} for r in rows]})
+        elif self.path == "/api/symbols/add" and self.command == "POST":
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
+            sym = body.get("symbol","").upper().strip()
+            name = body.get("name", sym.replace("USDT",""))
+            if not sym or not sym.endswith("USDT"):
+                self._json(400, {"error":"Symbol must end with USDT (e.g. DOGEUSDT)"}); return
+            db_conn.execute("INSERT OR IGNORE INTO watchlist (symbol,name) VALUES (?,?)", (sym,name))
+            db_conn.commit(); reload_symbols()
+            self._json(200, {"status":"added","symbol":sym,"name":name})
+        elif self.path.startswith("/api/symbols/") and self.command == "DELETE":
+            sym = self.path.split("/api/symbols/")[1].upper()
+            db_conn.execute("DELETE FROM watchlist WHERE symbol=?", (sym,))
+            db_conn.commit(); reload_symbols()
+            self._json(200, {"status":"deleted","symbol":sym})
         elif self.path.startswith("/i18n/"):
             fname = self.path.replace("/i18n/", "")
             path = os.path.join("/root/i18n", fname)

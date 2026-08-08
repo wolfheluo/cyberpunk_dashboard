@@ -5,7 +5,12 @@ import os, sys, csv, io, zipfile, urllib.request, time, sqlite3
 from datetime import datetime
 
 BINANCE_VISION = "https://data.binance.vision/data/spot/monthly/klines"
-SYMBOLS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","ADAUSDT","HYPERUSDT","LINKUSDT"]
+def load_symbols_from_db():
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("SELECT symbol FROM watchlist ORDER BY id").fetchall()
+    conn.close()
+    return [r[0] for r in rows] if rows else ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","ADAUSDT","HYPERUSDT","LINKUSDT"]
 START = (2025, 1)
 END = (2026, 6)
 INTERVAL = "1d"
@@ -70,8 +75,9 @@ def download_symbol(symbol):
     conn.close()
 
 def main():
-    print(f"Downloading {len(SYMBOLS)} symbols: {', '.join(SYMBOLS)}")
-    for sym in SYMBOLS:
+    syms = load_symbols_from_db()
+    print(f"Downloading {len(syms)} symbols: {', '.join(syms)}")
+    for sym in syms:
         print(f"\n=== {sym} ===")
         download_symbol(sym)
     print("\nDone!")
