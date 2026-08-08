@@ -89,16 +89,16 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
   <nav id="sidebar">
     <div id="sidebarToggle" onclick="toggleSidebar()">☰</div>
     <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
-      <span class="icon">📊</span><span class="nav-label">DASHBOARD</span>
+      <span class="icon">📊</span><span class="nav-label" data-i18n="nav_dashboard">DASHBOARD</span>
     </div>
     <div class="nav-item" data-page="strategies" onclick="switchPage('strategies')">
-      <span class="icon">⚙️</span><span class="nav-label">STRATEGIES</span>
+      <span class="icon">⚙️</span><span class="nav-label" data-i18n="nav_strategies">STRATEGIES</span>
     </div>
     <div class="nav-item" data-page="backtest" onclick="switchPage('backtest')">
-      <span class="icon">📈</span><span class="nav-label">BACKTEST</span>
+      <span class="icon">📈</span><span class="nav-label" data-i18n="nav_backtest">BACKTEST</span>
     </div>
     <div class="nav-item" data-page="account" onclick="switchPage('account')">
-      <span class="icon">👤</span><span class="nav-label">MY ACCOUNT</span>
+      <span class="icon">👤</span><span class="nav-label" data-i18n="nav_account">MY ACCOUNT</span>
     </div>
   </nav>
 
@@ -166,14 +166,14 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
     <div id="page-strategies" class="page">
       <div class="flex flex-1 overflow-hidden">
         <div class="w-[40%] border-r border-[#1E222D] overflow-y-auto p-3">
-          <div class="text-sm text-[#00E5FF] mb-3">STRATEGY LIST</div>
+          <div class="text-sm text-[#00E5FF] mb-3" data-i18n="strategy_list_title">STRATEGY LIST</div>
           <div id="strategyList" class="space-y-2"></div>
         </div>
         <div class="flex-1 flex flex-col overflow-hidden">
           <div class="flex items-center justify-between p-3 border-b border-[#1E222D]">
-            <span id="editorTitle" class="text-sm text-[#00E5FF]">Select a strategy</span>
+            <span id="editorTitle" class="text-sm text-[#00E5FF]" data-i18n="select_strategy">Select a strategy</span>
             <div class="flex gap-2">
-              <button class="btn-sm primary" onclick="saveStrategy()" id="btnSave" disabled>SAVE</button>
+              <button class="btn-sm primary" onclick="saveStrategy()" id="btnSave" disabled data-i18n="btn_save">SAVE</button>
             </div>
           </div>
           <textarea id="codeEditor" class="flex-1 p-3" placeholder="Select a strategy to edit..." disabled></textarea>
@@ -186,28 +186,28 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
     <div id="page-account" class="page">
       <div class="flex flex-1 overflow-hidden">
         <div class="w-[55%] overflow-y-auto p-3 border-r border-[#1E222D]">
-          <div class="text-sm text-[#00E5FF] mb-3">PORTFOLIO SUMMARY</div>
+          <div class="text-sm text-[#00E5FF] mb-3" data-i18n="portfolio_summary">PORTFOLIO SUMMARY</div>
           <div class="flex items-center gap-3 mb-3">
-            <span class="text-[12px] text-[#5A6275]">Active Strategy:</span>
+            <span class="text-[12px] text-[#5A6275]" data-i18n="active_strategy_label">Active Strategy:</span>
             <select class="strat-select" id="acctStrategySelect" onchange="activateStrategy(this.value)" style="max-width:250px">
               <option value="">Loading...</option>
             </select>
           </div>
           <div id="accountSummary" class="grid grid-cols-4 gap-3 mb-4"></div>
-          <div class="text-sm text-[#00E5FF] mb-2">OPEN POSITIONS</div>
+          <div class="text-sm text-[#00E5FF] mb-2" data-i18n="open_positions">OPEN POSITIONS</div>
           <div id="accountPositions" class="mb-4"><div class="text-[#5A6275] text-[12px]">Loading...</div></div>
-          <div class="text-sm text-[#00E5FF] mb-2">TRADE HISTORY</div>
+          <div class="text-sm text-[#00E5FF] mb-2" data-i18n="trade_history">TRADE HISTORY</div>
           <div id="accountTrades" class="text-[11px]"><div class="text-[#5A6275]">Loading...</div></div>
-          <div class="text-sm text-[#00E5FF] mb-2 mt-4">WATCHLIST MANAGEMENT</div>
+          <div class="text-sm text-[#00E5FF] mb-2 mt-4" data-i18n="watchlist_mgmt">WATCHLIST MANAGEMENT</div>
           <div class="flex gap-2 mb-2">
             <input id="newSymbol" class="bg-[#0A0C12] border border-[#1E222D] text-[#c0c8d8] px-2 py-1 text-[12px] rounded w-32 font-mono" placeholder="DOGEUSDT" style="outline:none">
             <input id="newSymbolName" class="bg-[#0A0C12] border border-[#1E222D] text-[#c0c8d8] px-2 py-1 text-[12px] rounded w-24 font-mono" placeholder="Dogecoin" style="outline:none">
-            <button class="btn-sm primary" onclick="addSymbol()">+ ADD</button>
+            <button class="btn-sm primary" onclick="addSymbol()" data-i18n="btn_add">+ ADD</button>
           </div>
           <div id="symbolList" class="text-[11px] space-y-1"></div>
         </div>
         <div class="flex-1 flex flex-col p-3 overflow-hidden">
-          <div class="text-sm text-[#00E5FF] mb-2">EQUITY CURVE</div>
+          <div class="text-sm text-[#00E5FF] mb-2" data-i18n="equity_curve">EQUITY CURVE</div>
           <div class="flex-1"><canvas id="accountChart" class="w-full h-full"></canvas></div>
         </div>
       </div>
@@ -332,14 +332,14 @@ function loadBacktest(){
 }
 function runBacktest(){
   var st=document.getElementById('backtestStatus');
-  st.textContent='Computing all strategies for all symbols...';
+  st.textContent=I18n.t('computing');
   st.className='text-[11px] text-[#FFCC00] mb-2';
   var start=Date.now();
   fetch('/api/backtest/run',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
     if(d.error){st.textContent='ERROR: '+d.error;st.className='text-[11px] text-[#FF2A6D] mb-2';btn.disabled=false;btn.textContent='\u25b6 RUN BACKTEST';return;}
     btData=d.backtests||[];
     var dur=((Date.now()-start)/1000).toFixed(1);
-    st.textContent='Done in '+dur+'s \u2014 '+btData.length+' results';
+    st.textContent=I18n.t('done_in')+' '+dur+'s \u2014 '+btData.length+' '+I18n.t('results');
     st.className='text-[11px] text-[#00FF66] mb-2';
 
     // Group by strategy
@@ -385,12 +385,12 @@ function drawBTCanvas(){
   c.width=p.clientWidth-8;c.height=p.clientHeight-8;
   var ctx=c.getContext('2d'),w=c.width,h=c.height;
   ctx.clearRect(0,0,w,h);
-  if(!btData.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText('No backtest data',w/2,h/2);ctx.textAlign='start';return;}
+  if(!btData.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText(I18n.t('no_historical'),w/2,h/2);ctx.textAlign='start';return;}
 
   // Find min/max equity across all curves
   var allEq=[],allDates=[];
   btData.forEach(function(b){allEq=allEq.concat(b.equity_curve||[]);allDates=allDates.concat(b.dates||[]);});
-  if(!allEq.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText('No equity data',w/2,h/2);ctx.textAlign='start';return;}
+  if(!allEq.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText(I18n.t('no_equity_data'),w/2,h/2);ctx.textAlign='start';return;}
   var eqMin=Math.min.apply(null,allEq),eqMax=Math.max.apply(null,allEq),eqRng=eqMax-eqMin||1;
   var pad=40;
 
@@ -557,7 +557,7 @@ function drawAccountChart(trades,initialCapital){
   c.width=p.clientWidth-8;c.height=p.clientHeight-8;
   var ctx=c.getContext('2d'),w=c.width,h=c.height,pad=40;
   ctx.clearRect(0,0,w,h);
-  if(!trades.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText('No trades yet',w/2,h/2);ctx.textAlign='start';return;}
+  if(!trades.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText(I18n.t('no_trades'),w/2,h/2);ctx.textAlign='start';return;}
 
   // Build equity curve from trade history
   var cash=initialCapital,positions={},equity=[],dates=[];
