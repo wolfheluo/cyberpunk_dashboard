@@ -315,15 +315,9 @@ function renderPipeline(pulse){
     ctx.strokeStyle=e[3];ctx.setLineDash(e[3]==='#FF2A6D'?[2,4]:[]);ctx.stroke();ctx.setLineDash([]);
     ctx.fillStyle=e[3];ctx.font='11px monospace';ctx.fillText(e[2],(a.x+b.x)/2-12,a.y+14);
   }
-  // Idle orb: patrols the SIGNAL→WAIT edge while nothing is being executed.
-  if(t!==undefined&&pipeOrbs.length===0){
-    var idleProg=((t%(1*2))%2)/2;
-    var ia=nodes[0],ib=nodes[1];
-    var idx2=ia.x+12+(ib.x-12-(ia.x+12))*idleProg,idy=ia.y+(ib.y-ia.y)*idleProg;
-    ctx.beginPath();ctx.arc(idx2,idy,3,0,Math.PI*2);ctx.fillStyle='#5A6275';
-    ctx.shadowColor='#5A6275';ctx.shadowBlur=6;ctx.fill();ctx.shadowBlur=0;
-  }
-  // Event orbs — each travels its own path, holds at the end, then fades out.
+  // Orbs — one per symbol per scan, spawned at SIGNAL, traveling one-way to
+  // their terminal node (WAIT/REJECT/FAIL/DONE), then destroyed after a hold.
+  // No return trips, no idle patrol orb.
   if(t!==undefined){
     var ORB_SPEED=0.06,HOLD_FRAMES=90,FADE_FRAMES=30; // ~2.2s travel, 1.5s hold, 0.5s fade
     for(var oi=0;oi<pipeOrbs.length;oi++){
@@ -342,7 +336,7 @@ function renderPipeline(pulse){
       if(segIdx>=segCount)continue;
       var sa=nodes[edges[segIdx][0]],sb=nodes[edges[segIdx][1]];
       var dx=sa.x+12+(sb.x-12-(sa.x+12))*segProg,dy=sa.y+(sb.y-sa.y)*segProg;
-      var orbColor=orb.path==='reject'?'#FF2A6D':orb.path==='fail'?'#FFCC00':orb.path==='wait'?'#5A6275':'#00E5FF';
+      var orbColor='#00E5FF'; // unified orb color
       ctx.globalAlpha=alpha;
       ctx.beginPath();ctx.arc(dx,dy,3,0,Math.PI*2);ctx.fillStyle=orbColor;
       ctx.shadowColor=orbColor;ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;
