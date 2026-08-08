@@ -253,7 +253,31 @@ function animateRadarPulse(){
 
 function renderKPIs(){var k=DATA.kpi;document.getElementById('kpiSharpe').textContent=k.sharpe!=null?Number(k.sharpe).toFixed(2):'--';document.getElementById('kpiWin').textContent=k.win_rate!=null?Number(k.win_rate).toFixed(1)+'%':'--';document.getElementById('kpiPnL').textContent=k.pnl_day!=null?(k.pnl_day>=0?'+':'')+'$'+Math.abs(k.pnl_day).toFixed(0):'--';document.getElementById('kpiDD').textContent=k.max_drawdown!=null?Number(k.max_drawdown).toFixed(1)+'%':'--';document.getElementById('navTotal').textContent=k.aum!=null?'$'+Number(k.aum).toLocaleString():'--';}
 
-var pipePulse=0,pipeAnimId=null,pipeHasSignal='wait',pipeSignalAge=0;
+var pipePulse=0,pipeAnimId=null,pipeOrbs=[];
+// Event-driven pipeline orbs: one orb per filled/rejected/failed trade event.
+// Each orb travels its path to completion, holds, then fades out — it never
+// disappears mid-flight (signal state no longer controls the animation).
+function pipeEdges(path){
+  if(path==='reject')return [[0,2],[2,3],[3,0]];
+  if(path==='fail')return [[0,2],[2,4],[4,5],[5,0]];
+  return [[0,2],[2,4],[4,6],[6,7]]; // exec
+}
+function spawnPipeOrb(path,label){
+  // Stagger simultaneous events slightly so orbs don't perfectly overlap.
+  pipeOrbs.push({path:path,t:(pipeOrbs.length%3)*0.4,done:false,doneAge:0,label:label||''});
+  if(pipeOrbs.length>14)pipeOrbs.shift();
+}
+function spawnOrbsFromData(){
+  var map={exec:'exec',rejected:'reject',failed:'fail'};
+  for(var k in map){
+    var evs=DATA[k];
+    if(evs&&evs.length){
+      for(var i=0;i<evs.length;i++){
+        spawnPipeOrb(map[k],evs[i].symbol+' '+(evs[i].side||''));
+      }
+    }
+  }
+}
 function renderPipeline(pulse){
   var c=document.getElementById('pipelineCanvas');if(!c)return;
   var p=c.parentElement;c.width=p.clientWidth-16;c.height=Math.max(p.clientHeight-4,50);
@@ -276,11 +300,6 @@ function renderPipeline(pulse){
     [4,5,'','#FF2A6D'],[4,6,'exec','#00FF66'],
     [6,7,'settle','#00E5FF']
   ];
-  var activeEdges;
-  if(pipeHasSignal==='reject')activeEdges=[[0,2],[2,3],[3,0]];
-  else if(pipeHasSignal==='fail')activeEdges=[[0,2],[2,4],[4,5],[5,0]];
-  else if(pipeHasSignal==='exec')activeEdges=[[0,2],[2,4],[4,6],[6,7]];
-  else activeEdges=[[0,1]];
   ctx.lineWidth=0.8;
   for(var i=0;i<allEdges.length;i++){
     var e=allEdges[i],a=nodes[e[0]],b=nodes[e[1]];
@@ -288,14 +307,38 @@ function renderPipeline(pulse){
     ctx.strokeStyle=e[3];ctx.setLineDash(e[3]==='#FF2A6D'?[2,4]:[]);ctx.stroke();ctx.setLineDash([]);
     ctx.fillStyle=e[3];ctx.font='11px monospace';ctx.fillText(e[2],(a.x+b.x)/2-12,a.y+14);
   }
+  // Idle orb: patrols the SIGNAL→WAIT edge while nothing is being executed.
+  if(t!==undefined&&pipeOrbs.length===0){
+    var idleProg=((t%(1*2))%2)/2;
+    var ia=nodes[0],ib=nodes[1];
+    var idx2=ia.x+12+(ib.x-12-(ia.x+12))*idleProg,idy=ia.y+(ib.y-ia.y)*idleProg;
+    ctx.beginPath();ctx.arc(idx2,idy,3,0,Math.PI*2);ctx.fillStyle='#5A6275';
+    ctx.shadowColor='#5A6275';ctx.shadowBlur=6;ctx.fill();ctx.shadowBlur=0;
+  }
+  // Event orbs — each travels its own path, holds at the end, then fades out.
   if(t!==undefined){
-    var segCount=activeEdges.length,segIdx=Math.floor((t%(segCount*2))/2);
-    var segProgress=((t%(segCount*2))%2)/2;
-    if(segIdx<segCount){
-      var sa=nodes[activeEdges[segIdx][0]],sb=nodes[activeEdges[segIdx][1]];
-      var dx=sa.x+12+(sb.x-12-(sa.x+12))*segProgress,dy=sa.y+(sb.y-sa.y)*segProgress;
-      ctx.beginPath();ctx.arc(dx,dy,3,0,Math.PI*2);ctx.fillStyle='#00E5FF';
-      ctx.shadowColor='#00E5FF';ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;
+    var ORB_SPEED=0.06,HOLD_FRAMES=90,FADE_FRAMES=30; // ~2.2s travel, 1.5s hold, 0.5s fade
+    for(var oi=0;oi<pipeOrbs.length;oi++){
+      var orb=pipeOrbs[oi],edges=pipeEdges(orb.path),segCount=edges.length,alpha=1;
+      if(!orb.done){
+        orb.t+=ORB_SPEED;
+        if(orb.t>=segCount*2){orb.done=true;orb.doneAge=0;orb.t=segCount*2-0.001;}
+      }else{
+        orb.doneAge++;
+        if(orb.doneAge>HOLD_FRAMES)alpha=Math.max(0,1-(orb.doneAge-HOLD_FRAMES)/FADE_FRAMES);
+        if(orb.doneAge>HOLD_FRAMES+FADE_FRAMES){pipeOrbs.splice(oi,1);oi--;continue;}
+      }
+      var segIdx=Math.floor((orb.t%(segCount*2))/2);
+      var segProg=((orb.t%(segCount*2))%2)/2;
+      if(segIdx>=segCount)continue;
+      var sa=nodes[edges[segIdx][0]],sb=nodes[edges[segIdx][1]];
+      var dx=sa.x+12+(sb.x-12-(sa.x+12))*segProg,dy=sa.y+(sb.y-sa.y)*segProg;
+      var orbColor=orb.path==='reject'?'#FF2A6D':orb.path==='fail'?'#FFCC00':'#00E5FF';
+      ctx.globalAlpha=alpha;
+      ctx.beginPath();ctx.arc(dx,dy,3,0,Math.PI*2);ctx.fillStyle=orbColor;
+      ctx.shadowColor=orbColor;ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;
+      if(orb.label){ctx.fillStyle='#5A6275';ctx.font='9px monospace';ctx.fillText(orb.label,dx-10,dy-8);}
+      ctx.globalAlpha=1;
     }
   }
   for(var n=0;n<nodes.length;n++){
@@ -309,22 +352,8 @@ function renderPipeline(pulse){
 }
 function animatePipeline(){
   if(!document.getElementById('pipelineCanvas')){pipeAnimId=null;return;}
+  if(currentPage!=='dashboard'){pipeAnimId=null;return;} // pause while off-page
   pipePulse=(pipePulse+0.03)%(8*2);
-  if(DATA&&DATA.tickers){
-    // Both BUY and SELL signals drive the exec path (short selling included).
-    var hasSignal=false,hasReject=(DATA.rejected||0)>0,hasFail=(DATA.failed||0)>0;
-    for(var i=0;i<DATA.tickers.length;i++){
-      var sg=DATA.tickers[i].signal;
-      if(sg==='BUY'||sg==='SELL'){hasSignal=true;break;}
-    }
-    if(hasSignal){pipeHasSignal='exec';pipeSignalAge=0;}
-    else if(hasReject){pipeHasSignal='reject';pipeSignalAge=0;}
-    else if(hasFail){pipeHasSignal='fail';pipeSignalAge=0;}
-    else {pipeSignalAge++;}
-    // No signal → orb flies back to WAIT almost immediately (15 frames =
-    // 0.25s debounce so a single poll blip doesn't flicker the path).
-    if(pipeSignalAge>15)pipeHasSignal='wait';
-  }
   renderPipeline(pipePulse);
   pipeAnimId=requestAnimationFrame(animatePipeline);
 }
@@ -483,6 +512,7 @@ function fetchData(){
       var cp=document.getElementById('cliPrompt');if(cp)cp.textContent=I18n.t('cli_scan')+' '+DATA.tickers.map(function(t){return t.id;}).join(' ');
       document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
       updateRailPrices();
+      spawnOrbsFromData();
       if(DATA.tickers.length&&currentPage==='dashboard'){
         // First data arrival: full render so the ticker rail gets built (R(false)
         // skips renderTickerRail). Later updates stay surgical to avoid flicker.

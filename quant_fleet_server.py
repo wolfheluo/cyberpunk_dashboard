@@ -35,6 +35,7 @@ _BASE = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else o
 STRATEGIES_DIR = os.path.join(_BASE, "strategies")
 HTML_PATH = os.path.join(_BASE, "dashboard", "cyberpunk_dashboard.html")
 TRADE_SIZE_PCT = 0.05
+MIN_CASH = 1000.0  # new positions rejected below this cash balance
 
 # ============================================================
 # SQLITE
@@ -254,77 +255,96 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None):
 
     BUY  — opens/adds a long position, or covers an existing short.
     SELL — closes an existing long, or opens/adds a short position.
-    Returns {"trade_id","quantity","notional"} or None (no-op / insufficient funds).
+
+    Returns one of:
+      {"status":"filled", "trade_id":..., "quantity":..., "notional":..., "realized_pnl":...}
+      {"status":"rejected", "reason":"insufficient_funds"}   — cash < MIN_CASH or notional < $10
+      {"status":"failed", "reason":"db_error"}               — trade could not be written to DB
     """
     with db_lock:
-        portfolio = db_conn.execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
-        if not portfolio: return None
-        cash = portfolio[0]
-        pos = db_conn.execute("SELECT side,quantity,entry_price FROM positions WHERE symbol=?", (symbol,)).fetchone()
-        realized = 0.0
-        trade_side = side
+        try:
+            portfolio = db_conn.execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
+            if not portfolio:
+                return {"status": "failed", "reason": "db_error"}
+            cash = portfolio[0]
+            pos = db_conn.execute("SELECT side,quantity,entry_price FROM positions WHERE symbol=?", (symbol,)).fetchone()
+            realized = 0.0
+            trade_side = side
 
-        if side == "BUY" and pos and pos[0] == "SELL":
-            # ---- Cover short: buy back (may be partial if cash is limited) ----
-            qty = min(pos[1], cash / price) if price else 0
-            if qty <= 0: return None
-            notional = qty * price
-            realized = (pos[2] - price) * qty
-            cash_change = -notional
-            remain = pos[1] - qty
-            if remain <= 0.00001:
+            if side == "BUY" and pos and pos[0] == "SELL":
+                # ---- Cover short: buy back (may be partial if cash is limited) ----
+                qty = min(pos[1], cash / price) if price else 0
+                if qty <= 0:
+                    return {"status": "rejected", "reason": "insufficient_funds"}
+                notional = qty * price
+                realized = (pos[2] - price) * qty
+                cash_change = -notional
+                remain = pos[1] - qty
+                if remain <= 0.00001:
+                    db_conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
+                else:
+                    db_conn.execute("UPDATE positions SET quantity=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                                    (remain, symbol))
+            elif side == "BUY":
+                # ---- Open / add long ----
+                if cash < MIN_CASH:
+                    return {"status": "rejected", "reason": "insufficient_funds"}
+                notional = min(cash * TRADE_SIZE_PCT, cash)
+                if notional < 10:
+                    return {"status": "rejected", "reason": "insufficient_funds"}
+                qty = notional / price
+                cash_change = -notional
+                if pos:  # add to existing long
+                    new_qty = pos[1] + qty
+                    avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
+                    db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                                    (new_qty, avg_entry, price, (price-avg_entry)*new_qty, symbol))
+                else:
+                    db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
+                                    (symbol, "BUY", price, qty, price, 0.0, strategy_name))
+            elif side == "SELL" and pos and pos[0] == "BUY":
+                # ---- Close long: liquidate entire position ----
+                qty = pos[1]
+                notional = qty * price
+                realized = (price - pos[2]) * qty
+                cash_change = notional
                 db_conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
             else:
-                db_conn.execute("UPDATE positions SET quantity=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
-                                (remain, symbol))
-        elif side == "BUY":
-            # ---- Open / add long ----
-            notional = min(cash * TRADE_SIZE_PCT, cash)
-            if notional < 10: return None  # min $10
-            qty = notional / price
-            cash_change = -notional
-            if pos:  # add to existing long
-                new_qty = pos[1] + qty
-                avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
-                db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
-                                (new_qty, avg_entry, price, (price-avg_entry)*new_qty, symbol))
-            else:
-                db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
-                                (symbol, "BUY", price, qty, price, 0.0, strategy_name))
-        elif side == "SELL" and pos and pos[0] == "BUY":
-            # ---- Close long: liquidate entire position ----
-            qty = pos[1]
-            notional = qty * price
-            realized = (price - pos[2]) * qty
-            cash_change = notional
-            db_conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
-        else:
-            # ---- Open / add short: sell now, buy back later ----
-            notional = min(cash * TRADE_SIZE_PCT, cash)
-            if notional < 10: return None  # min $10
-            qty = notional / price
-            cash_change = notional
-            if pos:  # add to existing short
-                new_qty = pos[1] + qty
-                avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
-                db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
-                                (new_qty, avg_entry, price, (avg_entry-price)*new_qty, symbol))
-            else:
-                db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
-                                (symbol, "SELL", price, qty, price, 0.0, strategy_name))
+                # ---- Open / add short ----
+                if cash < MIN_CASH:
+                    return {"status": "rejected", "reason": "insufficient_funds"}
+                notional = min(cash * TRADE_SIZE_PCT, cash)
+                if notional < 10:
+                    return {"status": "rejected", "reason": "insufficient_funds"}
+                qty = notional / price
+                cash_change = notional
+                if pos:  # add to existing short
+                    new_qty = pos[1] + qty
+                    avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
+                    db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                                    (new_qty, avg_entry, price, (avg_entry-price)*new_qty, symbol))
+                else:
+                    db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
+                                    (symbol, "SELL", price, qty, price, 0.0, strategy_name))
 
-        # Record trade
-        cur = db_conn.execute(
-            "INSERT INTO trades (symbol,side,price,quantity,notional,strategy,signal_id) VALUES (?,?,?,?,?,?,?)",
-            (symbol, trade_side, price, round(qty, 8), round(notional, 2), strategy_name, signal_id))
-        trade_id = cur.lastrowid
+            # Record trade
+            cur = db_conn.execute(
+                "INSERT INTO trades (symbol,side,price,quantity,notional,strategy,signal_id) VALUES (?,?,?,?,?,?,?)",
+                (symbol, trade_side, price, round(qty, 8), round(notional, 2), strategy_name, signal_id))
+            trade_id = cur.lastrowid
 
-        # Update cash
-        db_conn.execute("UPDATE portfolio SET cash=cash+?, updated_at=datetime('now', '+8 hours') WHERE id=1",
-                        (cash_change,))
-        db_conn.commit()
-        return {"trade_id": trade_id, "quantity": round(qty, 8), "notional": round(notional, 2),
-                "realized_pnl": round(realized, 2)}
+            # Update cash
+            db_conn.execute("UPDATE portfolio SET cash=cash+?, updated_at=datetime('now', '+8 hours') WHERE id=1",
+                            (cash_change,))
+            db_conn.commit()
+            return {"status": "filled", "trade_id": trade_id, "quantity": round(qty, 8),
+                    "notional": round(notional, 2), "realized_pnl": round(realized, 2)}
+        except Exception:
+            try:
+                db_conn.rollback()
+            except Exception:
+                pass
+            return {"status": "failed", "reason": "db_error"}
 
 def portfolio_stats(initial_capital=INITIAL_CAPITAL):
     """Average-cost based realized PnL + equity curve from trade history.
@@ -421,7 +441,8 @@ def fetch_all_data():
         }
 
     strategy_name = active_strategy.replace(".js","").replace("_"," ").title() if active_strategy else "none"
-    result = {"tickers":[], "exec_log":[], "timestamp":datetime.now().isoformat(), "rejected":0, "failed":0}
+    result = {"tickers":[], "exec_log":[], "timestamp":datetime.now().isoformat(),
+              "executed":[], "rejected":[], "failed":[]}
 
     # Get current portfolio
     with db_lock:
@@ -548,7 +569,9 @@ def fetch_all_data():
                 signal_id = cur.lastrowid
                 db_conn.commit()
 
-        # Auto-execute trade on BUY/SELL
+        # Auto-execute trade on BUY/SELL — collect per-event results for the
+        # pipeline animation: filled → exec orb, insufficient funds → reject orb,
+        # DB write failure → fail orb.
         current_pos = positions_map.get(sym)
         trade_result = None
         if signal == "BUY":
@@ -559,10 +582,16 @@ def fetch_all_data():
             # close long, or open short when flat
             if (current_pos and current_pos["side"] == "BUY") or (not current_pos):
                 trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)
-        if trade_result is None and signal == "BUY":
-            result["rejected"] = result.get("rejected", 0) + 1
-        elif trade_result is None and signal == "SELL":
-            result["failed"] = result.get("failed", 0) + 1
+        if trade_result:
+            st = trade_result.get("status")
+            event = {"symbol": sym, "side": signal, "price": price,
+                     "reason": trade_result.get("reason")}
+            if st == "filled":
+                result["executed"].append(event)
+            elif st == "rejected":
+                result["rejected"].append(event)
+            elif st == "failed":
+                result["failed"].append(event)
 
         sparkline = closes_1h[-18:] if len(closes_1h) >= 18 else closes_1h
         result["tickers"].append({
@@ -641,7 +670,10 @@ def fetch_all_data():
     ]
 
     # Real portfolio KPI (None → frontend shows "--")
-    win_rate, sharpe, max_dd = portfolio_stats(INITIAL_CAPITAL)
+    try:
+        win_rate, sharpe, max_dd = portfolio_stats(INITIAL_CAPITAL)
+    except Exception:
+        win_rate = sharpe = max_dd = None
 
     kpi = {
         "sharpe": sharpe,
@@ -656,7 +688,8 @@ def fetch_all_data():
         "strategy_matrix":{"strategies":strategy_names,"timeframes":timeframes_list,"cells":cells},
         "kpi":kpi,"factors":factors,
         "exec_log":list(exec_log[-50:]),
-        "active_strategy":strategy_name,"order_flow":{},"rejected":result.get("rejected",0),"failed":result.get("failed",0)
+        "active_strategy":strategy_name,"order_flow":{},
+        "executed":result.get("executed",[]),"rejected":result.get("rejected",[]),"failed":result.get("failed",[])
     }
 
 # ============================================================
