@@ -487,7 +487,9 @@ function evaluateJSStrategy(ticker){
         high_24h:w.high||ticker.high_24h,low_24h:w.low||ticker.low_24h,
         pct_from_high:w.high?((price-w.high)/w.high*100):0,
         pct_from_low:w.low?((price-w.low)/w.low*100):0,
-        book:book
+        book:book,
+        position:ticker.position,      // {side,quantity,entry_price} or null (1s poll)
+        portfolio:ticker.portfolio     // {cash,total_equity} (1s poll)
       },{rsi:rsi,sma20:sma20,sma50:calcSMA(closes,50),ema12:ema12,ema26:ema26,ema50:calcEMA(closes,50),
         macd_line:macd[0],macd_signal:macd[1],macd_hist:macd[2],
         bb_upper:bb[0],bb_middle:bb[1],bb_lower:bb[2],

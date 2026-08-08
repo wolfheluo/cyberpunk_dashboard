@@ -477,6 +477,16 @@ def fetch_all_data():
         for b in bt_raw:
             book_map[b["symbol"]] = b
 
+    # Portfolio snapshot for strategy params (position + available cash + equity)
+    with db_lock:
+        pf_row = db_conn.execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
+        portfolio_cash = pf_row[0] if pf_row else INITIAL_CAPITAL
+        pos_rows = db_conn.execute("SELECT symbol,side,quantity,entry_price FROM positions").fetchall()
+    pos_map = {r[0]: {"side": r[1], "quantity": r[2], "entry_price": r[3]} for r in pos_rows}
+    pos_value = sum(v["quantity"] * (price_map.get(s + "USDT", {}).get("price", 0) or 0)
+                    * (1 if v["side"] == "BUY" else -1) for s, v in pos_map.items())
+    portfolio_equity = portfolio_cash + pos_value
+
     ticker_infos = []
     for symbol in SYMBOLS:
         sym = symbol.replace("USDT", "")
@@ -521,7 +531,9 @@ def fetch_all_data():
                 "high_24h": high, "low_24h": low,
                 "pct_from_high": round((price - high) / high * 100, 3) if high else 0,
                 "pct_from_low": round((price - low) / low * 100, 3) if low else 0,
-                "book": book
+                "book": book,
+                "position": pos_map.get(sym),  # {side,quantity,entry_price} or null
+                "portfolio": {"cash": portfolio_cash, "total_equity": portfolio_equity}
             },
             "indicators": {
                 "rsi": round(calc_rsi(closes_1h, 14), 1),
@@ -599,6 +611,8 @@ def fetch_all_data():
             "id": sym, "name": name, "price": price, "change_pct": change_pct,
             "volume_m": round(volume / 1_000_000, 1), "signal": signal, "confidence": confidence,
             "book": info["ticker"]["book"],
+            "position": info["ticker"]["position"],
+            "portfolio": info["ticker"]["portfolio"],
             "sparkline": sparkline,
             "_rsi": round(info["indicators"]["rsi"], 1),
             "_sma4h": round(info["indicators"]["sma20"], price < 1 and 4 or 2),
@@ -772,6 +786,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "ticker.book.ask_qty,number,Best ask quantity,1.20\n"
                 "ticker.book.spread_pct,number,Spread as % of mid,0.0006\n"
                 "ticker.book.imbalance,number,(bid_qty-ask_qty)/(bid_qty+ask_qty) -1..1,0.17\n"
+                "ticker.position.side,string,Position side BUY|SELL or null,SELL\n"
+                "ticker.position.quantity,number,Position quantity or null,6.55\n"
+                "ticker.position.entry_price,number,Position avg entry price or null,76.20\n"
+                "ticker.portfolio.cash,number,Available cash balance,10500.00\n"
+                "ticker.portfolio.total_equity,number,Cash + marked position value,10000.80\n"
                 "indicators.rsi,number,RSI(14) on 1h closes 0-100,45.2\n"
                 "indicators.sma20,number,SMA(20) on 1h closes,65050.10\n"
                 "indicators.sma50,number,SMA(50) on 1h closes,64800.30\n"

@@ -112,7 +112,12 @@ function backtestOne(strategy, symbol, klines) {
       high_24h: k.high, low_24h: k.low,
       pct_from_high: k.high ? (price - k.high) / k.high * 100 : 0,
       pct_from_low: k.low ? (price - k.low) / k.low * 100 : 0,
-      book: null  // no historical order book — book params are live-only
+      book: null,  // no historical order book — book params are live-only
+      position: position ? {side: position.side, quantity: position.qty, entry_price: position.entry} : null,
+      portfolio: {
+        cash: cash,
+        total_equity: cash + (position ? position.qty * price * (position.side === 'SELL' ? -1 : 1) : 0)
+      }
     };
     let signal = 'HOLD';
     try {
