@@ -469,7 +469,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not os.path.isfile(path):
                 self._json(404, {"error": "Strategy not found"})
             else:
-                with open(path) as f: content = f.read()
+                with open(path, encoding="utf-8") as f: content = f.read()
                 self._json(200, {"filename": fname, "code": content,
                     "name": strategy_registry.get(fname, {}).get("name", fname),
                     "description": strategy_registry.get(fname, {}).get("description", "")})
@@ -518,7 +518,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._json(400, {"error":"Strategy already exists"})
             else:
                 template = body.get("code", '"""New Strategy."""\nNAME = "New Strategy"\nDESCRIPTION = ""\n\ndef evaluate(ticker, indicators):\n    return {"signal":"HOLD","confidence":50}')
-                with open(path, "w") as f: f.write(template)
+                with open(path, "w", encoding="utf-8") as f: f.write(template)
                 try:
                     spec = importlib.util.spec_from_file_location(fname[:-3], path)
                     mod = importlib.util.module_from_spec(spec)
