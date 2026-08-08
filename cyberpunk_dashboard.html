@@ -97,6 +97,9 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
     <div class="nav-item" data-page="backtest" onclick="switchPage('backtest')">
       <span class="icon">📈</span><span class="nav-label" data-i18n="nav_backtest">BACKTEST</span>
     </div>
+    <div class="nav-item" data-page="watchlist" onclick="switchPage('watchlist')">
+      <span class="icon">📋</span><span class="nav-label">WATCHLIST</span>
+    </div>
     <div class="nav-item" data-page="account" onclick="switchPage('account')">
       <span class="icon">👤</span><span class="nav-label" data-i18n="nav_account">MY ACCOUNT</span>
     </div>
@@ -276,7 +279,7 @@ function switchPage(page){
   document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-page')===page);});
   document.querySelectorAll('.page').forEach(function(el){el.classList.toggle('active',el.id==='page-'+page);});
   if(page==='strategies')loadStrategyList();
-  if(page==='backtest')runBacktest();if(page==='account')loadAccount();if(page==='watchlist')loadSymbols();
+  if(page==='backtest')runBacktest();if(page==='account')loadAccount();if(page==='watchlist')loadSymbols();if(page==='watchlist')loadSymbols();
 }
 
 // ============================================================
