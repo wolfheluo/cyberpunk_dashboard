@@ -334,7 +334,9 @@ function renderPipeline(pulse){
       var segProg=((orb.t%(segCount*2))%2)/2;
       if(segIdx>=segCount)continue;
       var sa=nodes[edges[segIdx][0]],sb=nodes[edges[segIdx][1]];
-      var dx=sa.x+12+(sb.x-12-(sa.x+12))*segProg,dy=sa.y+(sb.y-sa.y)*segProg;
+      // Travel node-center to node-center so the orb visually ARRIVES at the
+      // terminal node before holding and fading out.
+      var dx=sa.x+(sb.x-sa.x)*segProg,dy=sa.y+(sb.y-sa.y)*segProg;
       var orbColor='#00E5FF'; // unified orb color
       ctx.globalAlpha=alpha;
       ctx.beginPath();ctx.arc(dx,dy,3,0,Math.PI*2);ctx.fillStyle=orbColor;
