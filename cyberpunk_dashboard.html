@@ -182,6 +182,19 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
       </div>
     </div>
 
+    <!-- PAGE: Watchlist -->
+    <div id="page-watchlist" class="page">
+      <div class="p-4 overflow-y-auto flex-1">
+        <div class="text-sm text-[#00E5FF] mb-3">WATCHLIST MANAGEMENT</div>
+        <div class="flex gap-2 mb-3">
+          <input id="newSymbol" class="bg-[#0A0C12] border border-[#1E222D] text-[#c0c8d8] px-2 py-1 text-[12px] rounded w-32 font-mono" placeholder="DOGEUSDT" style="outline:none">
+          <input id="newSymbolName" class="bg-[#0A0C12] border border-[#1E222D] text-[#c0c8d8] px-2 py-1 text-[12px] rounded w-28 font-mono" placeholder="Dogecoin" style="outline:none">
+          <button class="btn-sm primary" onclick="addSymbol()">+ ADD</button>
+        </div>
+        <div id="symbolList" class="text-[12px] space-y-1 max-w-md"></div>
+      </div>
+    </div>
+
     <!-- PAGE: Account -->
     <div id="page-account" class="page">
       <div class="flex flex-1 overflow-hidden">
@@ -263,7 +276,7 @@ function switchPage(page){
   document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-page')===page);});
   document.querySelectorAll('.page').forEach(function(el){el.classList.toggle('active',el.id==='page-'+page);});
   if(page==='strategies')loadStrategyList();
-  if(page==='backtest')runBacktest();if(page==='account')loadAccount();
+  if(page==='backtest')runBacktest();if(page==='account')loadAccount();if(page==='watchlist')loadSymbols();
 }
 
 // ============================================================
