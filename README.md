@@ -138,7 +138,10 @@ export `NAME`, `DESCRIPTION`, and an `evaluate(ticker, indicators)` function:
   DESCRIPTION: "Brief description",
   evaluate: function (ticker, indicators) {
     // ticker: {id, name, price, volume, change_pct, high_24h, low_24h,
-    //          pct_from_high, pct_from_low, book}
+    //          pct_from_high, pct_from_low, book, position, portfolio}
+    //   position: current holding for THIS symbol {side, quantity, entry_price}
+    //             or null
+    //   portfolio: {cash, total_equity} — available balance & marked equity
     //   book: {best_bid, best_ask, bid_qty, ask_qty, spread_pct, imbalance}
     //         (order book summary — null in backtests, live-only)
     // indicators: {rsi, sma20, sma50, ema12, ema26, ema50,
