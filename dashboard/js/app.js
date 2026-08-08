@@ -24,7 +24,7 @@ function switchPage(page){
 // ============================================================
 // DATA
 // ============================================================
-var DATA={connected:false,latency_ms:null,tickers:[],strategy_matrix:{strategies:[],timeframes:[],cells:[]},kpi:{},factors:[],exec_log:[],active_strategy:'',positions:[],trades:[]};
+var DATA={connected:false,latency_ms:null,tickers:[],strategy_matrix:{strategies:[],timeframes:[],cells:[]},kpi:{},factors:[],exec_log:[],active_strategy:'',positions:[],trades:[],executed:[],rejected:[],failed:[]};
 var strategiesList=[],activeStratFile='',editingFile='';
 
 // ============================================================
