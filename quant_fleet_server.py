@@ -442,9 +442,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             pos_val = sum(r[2]*(r[0] or r[2]) for r in db_conn.execute("SELECT current_price,entry_price,quantity FROM positions").fetchall())
             self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,"total_equity":pf[0]+pos_val})
         elif self.path == "/api/symbols":
-            if self.command == "GET":
-                rows = db_conn.execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()
-                self._json(200, {"symbols":[{"id":r[0],"symbol":r[1],"name":r[2]} for r in rows]})
+            rows = db_conn.execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()
+            self._json(200, {"symbols":[{"id":r[0],"symbol":r[1],"name":r[2]} for r in rows]})
         elif self.path.startswith("/dashboard/i18n/") or self.path.startswith("/i18n/"):
             fname = self.path.replace("/dashboard/i18n/", "").replace("/i18n/", "")
             path = os.path.join(_BASE, "dashboard", "i18n", fname)
