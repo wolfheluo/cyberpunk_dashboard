@@ -258,19 +258,19 @@ function renderPipeline(pulse){
   var t=pulse||0;
   var nodes=[
     {x:cx,y:cy,label:'SIGNAL',color:'#00E5FF',active:true},
-    {x:cx+step,y:cy-20,label:'WAIT',color:'#5A6275',active:false},
+    {x:cx+step,y:cy-24,label:'WAIT',color:'#5A6275',active:false},
     {x:cx+step*2,y:cy,label:'RISK',color:'#00FF66',active:true},
-    {x:cx+step*3,y:cy-20,label:'REJECT',color:'#5A6275',active:false},
+    {x:cx+step*3,y:cy-24,label:'REJECT',color:'#5A6275',active:false},
     {x:cx+step*4,y:cy,label:'ORDER',color:'#00E5FF',active:true},
-    {x:cx+step*5,y:cy-20,label:'FAIL',color:'#5A6275',active:false},
+    {x:cx+step*5,y:cy-24,label:'FAIL',color:'#5A6275',active:false},
     {x:cx+step*6,y:cy,label:'FILL',color:'#00FF66',active:true},
     {x:cx+step*7,y:cy,label:'DONE',color:'#00E5FF',active:true}
   ];
   var activeEdges=[[0,2],[2,4],[4,6],[6,7]];
   var allEdges=[
-    [0,1,'no path','#FF2A6D'],[0,2,'signal','#00E5FF'],
-    [2,3,'no path','#FF2A6D'],[2,4,'pass','#00FF66'],
-    [4,5,'no path','#FF2A6D'],[4,6,'exec','#00FF66'],
+    [0,1,'','#FF2A6D'],[0,2,'signal','#00E5FF'],
+    [2,3,'','#FF2A6D'],[2,4,'pass','#00FF66'],
+    [4,5,'','#FF2A6D'],[4,6,'exec','#00FF66'],
     [6,7,'settle','#00E5FF']
   ];
   ctx.lineWidth=0.8;
