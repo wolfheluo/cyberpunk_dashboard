@@ -347,18 +347,6 @@ function renderExecLog(){
 // ============================================================
 // FETCH LOOP
 // ============================================================
-var PI=1000;
-function fetchData(){
-  // WebSocket push handles updates; fallback polling
-  var start=Date.now();
-  fetch('/api/data').then(function(r){return r.json();}).then(function(data){
-    applyData(data, Date.now()-start);
-  }).catch(function(err){
-    document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;
-    document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();
-    setTimeout(fetchData,PI);
-  });
-}
 // WebSocket real-time push
 function connectWS(){
   var ws=new WebSocket('ws://'+location.hostname+':8898');
@@ -368,12 +356,12 @@ function connectWS(){
     catch(ex){console.log('[WS] Parse error:',ex);}
   };
   ws.onclose=function(){console.log('[WS] Disconnected, retry in 3s...');setTimeout(connectWS,3000);};
-  ws.onerror=function(){};
+  ws.onerror=function(){ws.close();}
 }
 function applyData(data,latency){
   for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}
   DATA.positions=data.positions||[];DATA.trades=data.trades||[];DATA.connected=true;DATA.latency_ms=latency;
-  document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+(latency||'push')+'ms';
+  document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | ';
   document.getElementById('statusBar').className='text-[#00FF66]';
   if(currentPage==='dashboard')R();
 }
