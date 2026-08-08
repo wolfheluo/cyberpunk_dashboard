@@ -321,6 +321,23 @@ function openStrategy(fname){
     document.getElementById('editorStatus').textContent='Editing: '+d.filename;
   });
 }
+function createStrategy(){
+  var name=prompt('Strategy filename (e.g. my_strategy.py):','new_strategy.py');
+  if(!name)return;
+  fetch('/api/strategy/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:name})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.error){alert(d.error);return;}
+      loadStrategies();loadStrategyList();openStrategy(d.filename);
+    });
+}
+function deleteStrategy(fname){
+  if(fname===activeStratFile){alert('Cannot delete active strategy. Switch first.');return;}
+  if(!confirm('Delete '+fname+'?'))return;
+  fetch('/api/strategy/'+fname+'/delete',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+    loadStrategies();loadStrategyList();
+    if(editingFile===fname){document.getElementById('codeEditor').value='';document.getElementById('codeEditor').disabled=true;document.getElementById('btnSave').disabled=true;document.getElementById('editorTitle').textContent='Select a strategy';editingFile='';}
+  });
+}
 function saveStrategy(){
   if(!editingFile)return;
   var code=document.getElementById('codeEditor').value;

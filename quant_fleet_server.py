@@ -517,6 +517,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 db_conn.commit()
             with log_lock: exec_log.clear()
             self._json(200,{"status":"reset","capital":INITIAL_CAPITAL})
+        elif self.path == "/api/strategy/create":
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
+            fname = body.get("filename","").strip()
+            if not fname.endswith(".py"): fname += ".py"
+            path = os.path.join(STRATEGIES_DIR, fname)
+            if os.path.isfile(path):
+                self._json(400, {"error":"Strategy already exists"})
+            else:
+                template = body.get("code", '"""New Strategy."""\nNAME = "New Strategy"\nDESCRIPTION = ""\n\ndef evaluate(ticker, indicators):\n    return {"signal":"HOLD","confidence":50}')
+                with open(path, "w") as f: f.write(template)
+                try:
+                    spec = importlib.util.spec_from_file_location(fname[:-3], path)
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    name = getattr(mod, 'NAME', fname[:-3].replace('_',' ').title())
+                    desc = getattr(mod, 'DESCRIPTION', '')
+                    strategy_registry[fname] = {"filename":fname,"name":name,"description":desc,"module":mod}
+                    self._json(200, {"status":"created","filename":fname,"name":name})
+                except Exception as e:
+                    self._json(400, {"error":f"Syntax error: {e}"})
+        elif self.path.startswith("/api/strategy/") and self.path.endswith("/delete"):
+            fname = self.path.split("/api/strategy/")[1].replace("/delete", "")
+            path = os.path.join(STRATEGIES_DIR, fname)
+            if not os.path.isfile(path):
+                self._json(404, {"error":"Strategy not found"})
+            else:
+                os.remove(path)
+                if fname in strategy_registry: del strategy_registry[fname]
+                if active_strategy == fname:
+                    active_strategy = list(strategy_registry.keys())[0] if strategy_registry else None
+                self._json(200, {"status":"deleted","filename":fname})
         elif self.path.startswith("/api/strategy/") and self.path.endswith("/save"):
             fname = self.path.split("/api/strategy/")[1].replace("/save", "")
             path = os.path.join(STRATEGIES_DIR, fname)
