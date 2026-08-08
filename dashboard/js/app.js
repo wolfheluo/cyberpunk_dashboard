@@ -260,22 +260,30 @@ var pipePulse=0,pipeAnimId=null,pipeOrbs=[];
 function pipeEdges(path){
   if(path==='reject')return [[0,2],[2,3],[3,0]];
   if(path==='fail')return [[0,2],[2,4],[4,5],[5,0]];
+  if(path==='wait')return [[0,1]];
   return [[0,2],[2,4],[4,6],[6,7]]; // exec
 }
 function spawnPipeOrb(path,label){
   // Stagger simultaneous events slightly so orbs don't perfectly overlap.
   pipeOrbs.push({path:path,t:(pipeOrbs.length%3)*0.4,done:false,doneAge:0,label:label||''});
-  if(pipeOrbs.length>14)pipeOrbs.shift();
+  if(pipeOrbs.length>40)pipeOrbs.shift();
 }
+// One orb per symbol per scan: the orb travels SIGNAL→WAIT when the strategy
+// held, or SIGNAL→RISK→…→DONE/REJECT/FAIL based on the trade outcome.
 function spawnOrbsFromData(){
-  var map={exec:'exec',rejected:'reject',failed:'fail'};
-  for(var k in map){
-    var evs=DATA[k];
-    if(evs&&evs.length){
-      for(var i=0;i<evs.length;i++){
-        spawnPipeOrb(map[k],evs[i].symbol+' '+(evs[i].side||''));
-      }
+  var res={};
+  for(var i=0;i<DATA.executed.length;i++)res[DATA.executed[i].symbol]='exec';
+  for(var i=0;i<DATA.rejected.length;i++)res[DATA.rejected[i].symbol]='reject';
+  for(var i=0;i<DATA.failed.length;i++)res[DATA.failed[i].symbol]='fail';
+  for(var i=0;i<DATA.tickers.length;i++){
+    var t=DATA.tickers[i];
+    var path;
+    if(t.signal==='BUY'||t.signal==='SELL'){
+      path=res[t.id]||'reject'; // server guarantees an event per signal; be safe
+    }else{
+      path='wait';
     }
+    spawnPipeOrb(path,t.id+' '+(t.signal||''));
   }
 }
 function renderPipeline(pulse){
@@ -318,6 +326,8 @@ function renderPipeline(pulse){
   // Event orbs — each travels its own path, holds at the end, then fades out.
   if(t!==undefined){
     var ORB_SPEED=0.06,HOLD_FRAMES=90,FADE_FRAMES=30; // ~2.2s travel, 1.5s hold, 0.5s fade
+    var isWait=orb.path==='wait';
+    if(isWait)HOLD_FRAMES=30; // wait orbs mark "no trigger" — fade out quickly
     for(var oi=0;oi<pipeOrbs.length;oi++){
       var orb=pipeOrbs[oi],edges=pipeEdges(orb.path),segCount=edges.length,alpha=1;
       if(!orb.done){
@@ -333,7 +343,7 @@ function renderPipeline(pulse){
       if(segIdx>=segCount)continue;
       var sa=nodes[edges[segIdx][0]],sb=nodes[edges[segIdx][1]];
       var dx=sa.x+12+(sb.x-12-(sa.x+12))*segProg,dy=sa.y+(sb.y-sa.y)*segProg;
-      var orbColor=orb.path==='reject'?'#FF2A6D':orb.path==='fail'?'#FFCC00':'#00E5FF';
+      var orbColor=orb.path==='reject'?'#FF2A6D':orb.path==='fail'?'#FFCC00':orb.path==='wait'?'#5A6275':'#00E5FF';
       ctx.globalAlpha=alpha;
       ctx.beginPath();ctx.arc(dx,dy,3,0,Math.PI*2);ctx.fillStyle=orbColor;
       ctx.shadowColor=orbColor;ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;

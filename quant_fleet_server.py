@@ -569,19 +569,23 @@ def fetch_all_data():
                 signal_id = cur.lastrowid
                 db_conn.commit()
 
-        # Auto-execute trade on BUY/SELL — collect per-event results for the
-        # pipeline animation: filled → exec orb, insufficient funds → reject orb,
-        # DB write failure → fail orb.
+        # Auto-execute trade on BUY/SELL — every symbol with a signal produces
+        # exactly one event so the pipeline orb has a defined path:
+        #   filled  → exec orb (SIGNAL→RISK→ORDER→FILL→DONE)
+        #   rejected → reject orb (→REJECT): insufficient funds / already in position
+        #   failed  → fail orb (→FAIL): trade could not be written to DB
         current_pos = positions_map.get(sym)
         trade_result = None
         if signal == "BUY":
-            # cover short, or open long when flat
             if (current_pos and current_pos["side"] == "SELL") or (not current_pos):
                 trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)
+            elif current_pos and current_pos["side"] == "BUY":
+                trade_result = {"status": "rejected", "reason": "already_in_position"}
         elif signal == "SELL":
-            # close long, or open short when flat
             if (current_pos and current_pos["side"] == "BUY") or (not current_pos):
                 trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)
+            elif current_pos and current_pos["side"] == "SELL":
+                trade_result = {"status": "rejected", "reason": "already_in_position"}
         if trade_result:
             st = trade_result.get("status")
             event = {"symbol": sym, "side": signal, "price": price,
