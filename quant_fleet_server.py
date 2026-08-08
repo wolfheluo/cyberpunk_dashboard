@@ -421,6 +421,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 with open(HTML_PATH,"rb") as f: content=f.read()
                 self.send_response(200); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
             except: self.send_error(404)
+        elif self.path.startswith("/api/strategy/") and self.path.endswith("/code"):
+            fname = self.path.split("/api/strategy/")[1].replace("/code", "")
+            path = os.path.join(STRATEGIES_DIR, fname)
+            if not os.path.isfile(path):
+                self._json(404, {"error": "Strategy not found"})
+            else:
+                with open(path) as f: content = f.read()
+                self._json(200, {"filename": fname, "code": content,
+                    "name": strategy_registry.get(fname, {}).get("name", fname),
+                    "description": strategy_registry.get(fname, {}).get("description", "")})
+
+        elif self.path == "/api/backtests":
+            rows = db_conn.execute(
+                "SELECT symbol,strategy,final_equity,total_return_pct,trades_count,buy_count,sell_count,equity_curve,dates_json,created_at FROM backtests ORDER BY total_return_pct DESC"
+            ).fetchall()
+            results = []
+            for r in rows:
+                results.append({
+                    "symbol": r[0], "strategy": r[1], "final_equity": r[2],
+                    "total_return_pct": r[3], "trades_count": r[4],
+                    "buy_count": r[5], "sell_count": r[6],
+                    "equity_curve": json.loads(r[7]) if r[7] else [],
+                    "dates": json.loads(r[8]) if r[8] else [],
+                    "created_at": r[9]
+                })
+            self._json(200, {"backtests": results})
+
         else:
             super().do_GET()
 
@@ -444,6 +471,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 db_conn.commit()
             with log_lock: exec_log.clear()
             self._json(200,{"status":"reset","capital":INITIAL_CAPITAL})
+        elif self.path.startswith("/api/strategy/") and self.path.endswith("/save"):
+            fname = self.path.split("/api/strategy/")[1].replace("/save", "")
+            path = os.path.join(STRATEGIES_DIR, fname)
+            if not os.path.isfile(path):
+                self._json(404, {"error": "Strategy not found"})
+            else:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                new_code = body.get("code", "")
+                if new_code:
+                    with open(path, "w") as f: f.write(new_code)
+                    # Reload strategy
+                    try:
+                        spec = importlib.util.spec_from_file_location(fname[:-3], path)
+                        mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(mod)
+                        name = getattr(mod, 'NAME', fname[:-3].replace('_', ' ').title())
+                        desc = getattr(mod, 'DESCRIPTION', '')
+                        strategy_registry[fname] = {"filename": fname, "name": name, "description": desc, "module": mod}
+                        self._json(200, {"status": "saved", "name": name})
+                    except Exception as e:
+                        self._json(400, {"error": f"Syntax error: {e}"})
+                else:
+                    self._json(400, {"error": "No code provided"})
+
         else:
             self.send_error(404)
 
