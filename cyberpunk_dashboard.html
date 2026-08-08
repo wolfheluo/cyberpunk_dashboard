@@ -280,7 +280,7 @@ function switchPage(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-page')===page);});
   document.querySelectorAll('.page').forEach(function(el){el.classList.toggle('active',el.id==='page-'+page);});
-  if(page==='strategies')loadStrategyList();
+  if(radarAnimId){cancelAnimationFrame(radarAnimId);radarAnimId=null;}if(page==='strategies')loadStrategyList();
   if(page==='backtest')runBacktest();if(page==='account')loadAccount();if(page==='watchlist')loadSymbols();
 }
 
@@ -497,6 +497,23 @@ function renderRadar(){
   for(i=0;i<nf;i++){rctx.beginPath();rctx.arc(pts[i].x,pts[i].y,2.5,0,Math.PI*2);rctx.fillStyle='#00E5FF';rctx.fill();}
   rctx.beginPath();rctx.arc(cx,cy,4,0,Math.PI*2);rctx.fillStyle='#00FF66';rctx.shadowColor='#00FF66';rctx.shadowBlur=10;rctx.fill();rctx.shadowBlur=0;rctx.textAlign='start';
 }
+
+var radarPulse=0,radarAnimId=null;
+function animateRadar(){
+  if(!document.getElementById('factorRadar'))return;
+  radarPulse=(radarPulse+0.05)%(Math.PI*2);
+  var rd=document.getElementById('factorRadar'),rctx2=rd.getContext('2d');
+  var cx=105,cy=105,glow=4+Math.sin(radarPulse)*2;
+  rctx2.beginPath();rctx2.arc(cx,cy,glow,0,Math.PI*2);
+  rctx2.fillStyle='#00FF66';rctx2.shadowColor='#00FF66';rctx2.shadowBlur=10+Math.sin(radarPulse)*6;
+  rctx2.fill();rctx2.shadowBlur=0;
+  var ringR=6+Math.sin(radarPulse)*8;
+  rctx2.beginPath();rctx2.arc(cx,cy,ringR,0,Math.PI*2);
+  rctx2.strokeStyle='rgba(0,255,102,'+(0.4-Math.sin(radarPulse)*0.3)+')';rctx2.lineWidth=1;
+  rctx2.stroke();
+  radarAnimId=requestAnimationFrame(animateRadar);
+}
+
 function renderKPIs(){var k=DATA.kpi;document.getElementById('kpiSharpe').textContent=k.sharpe!=null?Number(k.sharpe).toFixed(2):'--';document.getElementById('kpiWin').textContent=k.win_rate!=null?Number(k.win_rate).toFixed(1)+'%':'--';document.getElementById('kpiPnL').textContent=k.pnl_day!=null?(k.pnl_day>=0?'+':'')+'$'+Math.abs(k.pnl_day).toFixed(0):'--';document.getElementById('kpiDD').textContent=k.max_drawdown!=null?Number(k.max_drawdown).toFixed(1)+'%':'--';document.getElementById('navTotal').textContent=k.aum!=null?'$'+Number(k.aum).toLocaleString():'--';}
 function renderStrategyMatrix(){
   var mx=document.getElementById('strategyMatrix');mx.innerHTML='';var sm=DATA.strategy_matrix;
