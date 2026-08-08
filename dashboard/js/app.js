@@ -258,11 +258,11 @@ function renderPipeline(pulse){
   var t=pulse||0;
   var nodes=[
     {x:cx,y:cy,label:'SIGNAL',color:'#00E5FF',active:true},
-    {x:cx+step,y:cy-16,label:'WAIT',color:'#5A6275',active:false},
+    {x:cx+step,y:cy-20,label:'WAIT',color:'#5A6275',active:false},
     {x:cx+step*2,y:cy,label:'RISK',color:'#00FF66',active:true},
-    {x:cx+step*3,y:cy-16,label:'REJECT',color:'#5A6275',active:false},
+    {x:cx+step*3,y:cy-20,label:'REJECT',color:'#5A6275',active:false},
     {x:cx+step*4,y:cy,label:'ORDER',color:'#00E5FF',active:true},
-    {x:cx+step*5,y:cy-16,label:'FAIL',color:'#5A6275',active:false},
+    {x:cx+step*5,y:cy-20,label:'FAIL',color:'#5A6275',active:false},
     {x:cx+step*6,y:cy,label:'FILL',color:'#00FF66',active:true},
     {x:cx+step*7,y:cy,label:'DONE',color:'#00E5FF',active:true}
   ];
@@ -279,7 +279,7 @@ function renderPipeline(pulse){
     for(var j=0;j<activeEdges.length;j++){if(activeEdges[j][0]===e[0]&&activeEdges[j][1]===e[1]){isActive=true;break;}}
     ctx.beginPath();ctx.moveTo(a.x+12,a.y);ctx.lineTo(b.x-12,b.y);
     ctx.strokeStyle=e[3];ctx.setLineDash(e[3]==='#FF2A6D'?[2,4]:[]);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle=e[3];ctx.font='11px monospace';ctx.fillText(e[2],(a.x+b.x)/2-12,a.y+10);
+    ctx.fillStyle=e[3];ctx.font='11px monospace';ctx.fillText(e[2],(a.x+b.x)/2-12,a.y+14);
   }
   // Flowing dot on active path
   if(t!==undefined){
