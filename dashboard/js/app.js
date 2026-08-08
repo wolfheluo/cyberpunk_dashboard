@@ -39,7 +39,7 @@ function loadStrategies(){
 function activateStrategy(fname){
   if(!fname||fname===activeStratFile)return;
   fetch('/api/strategy/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:fname})})
-    .then(function(r){return r.json();}).then(function(d){activeStratFile=d.active;loadActiveJSStrategy();document.getElementById('activeStratLabel').textContent=d.name;document.getElementById('strategySelect').value=d.active;});
+    .then(function(r){return r.json();}).then(function(d){activeStratFile=d.active;loadActiveJSStrategy();document.getElementById('activeStratLabel').textContent=d.name;});
 }
 
 // ============================================================
@@ -370,6 +370,14 @@ function updatePrices(){
     var p=wsPrices[DATA.tickers[i].id+'USDT'];
     if(p) DATA.tickers[i].price=p;
   }
+  // Re-evaluate strategies on every price update
+  if(activeJSStrategy){
+    for(var i=0;i<DATA.tickers.length;i++){
+      var s=evaluateJSStrategy(DATA.tickers[i]);
+      DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;
+    }
+  }
+  if(currentPage==='dashboard')R();
 }
 
 // ============================================================
@@ -405,7 +413,7 @@ function fetchData(){
     .then(function(results){var data=results[0],pos=results[1],trades=results[2],latency=Date.now()-start;
       for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}if(data.tickers){var cs=[];for(var i=0;i<data.tickers.length;i++){if(data.tickers[i].sparkline)cs=data.tickers[i].sparkline;}if(cs.length)DATA._closes=cs;}DATA.positions=pos.positions||[];DATA.trades=trades.trades||[];DATA.connected=true;DATA.latency_ms=latency;
       document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
-      if(DATA.tickers&&activeJSStrategy){for(var i=0;i<DATA.tickers.length;i++){var s=evaluateJSStrategy(DATA.tickers[i]);DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;}}if(currentPage==='dashboard')R();setTimeout(fetchData,PI);
+      if(currentPage==='dashboard')R();setTimeout(fetchData,PI);
     }).catch(function(err){document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();setTimeout(fetchData,PI);});
 }
 
