@@ -168,3 +168,22 @@ def evaluate(ticker, indicators):
 | 🟢 低 | 6 | 未使用 import、死變數、i18n 缺漏、polling 效率 |
 
 整體架構清晰，模組化合理（`init_db.py` 獨立、策略插件式、前端三頁結構）。主要風險集中在策略自動交易邏輯和回測精確度上，建議優先修復 `vol_surge` 和 BUY 加倉上限。
+
+
+---
+
+## 修補驗證 (2026-08-08)
+
+| # | 項目 | 狀態 |
+|---|------|------|
+| 1 | `vol_surge` 計算修正 | ✅ 改為近 10 根 K 線平均成交量比較 |
+| 2 | 回測 warmup 期權益追蹤 | ✅ 加入 `cash + pos_value` |
+| 3 | 策略 matrix 動態化 | ✅ 從 `strategy_registry` 讀取實際策略名稱 |
+| 4 | BUY 訊號加倉限制 | ✅ 改為僅無持倉時才觸發 BUY |
+| 5 | `/api/backtests` 死端點 | ✅ 已刪除 |
+| 6 | 帳戶權益曲線 MTM | ✅ 加入持倉市值計算 |
+| 7 | `import math` 未使用 | ✅ 已刪除 |
+| 8 | `trade_logs` / `trade_info` 死變數 | ✅ 已刪除 |
+| 9 | i18n 硬編碼字串 | ✅ 所有 "No open positions" / "No trades yet" 改用 I18n.t() |
+
+**驗證方式**: 靜態程式碼檢查，11/11 項全部通過。
