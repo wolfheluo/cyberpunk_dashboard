@@ -225,10 +225,12 @@ def portfolio_stats(initial_capital=INITIAL_CAPITAL):
     if not rows:
         return None, None, None
     basis = {}  # symbol -> list of [remaining_qty, price]
+    last_price = {}  # symbol -> most recent trade price (per-symbol MTM)
     cash = initial_capital
     equity = []
     wins = losses = 0
     for sym, side, price, qty in rows:
+        last_price[sym] = price
         if side == "BUY":
             cash -= qty * price
             basis.setdefault(sym, []).append([qty, price])
@@ -248,7 +250,7 @@ def portfolio_stats(initial_capital=INITIAL_CAPITAL):
                 wins += 1
             elif realized < 0:
                 losses += 1
-        mtm = sum(lot[0] * price for lots in basis.values() for lot in lots)
+        mtm = sum(lot[0] * last_price.get(s, price) for s, lots in basis.items() for lot in lots)
         equity.append(cash + mtm)
 
     win_rate = (wins / (wins + losses) * 100) if (wins + losses) else None

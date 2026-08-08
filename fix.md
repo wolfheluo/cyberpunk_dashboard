@@ -38,6 +38,7 @@
 
 ### ~~M-4. KPI 指標是捏造的公式~~
 **已修**：新增 `portfolio_stats()` — FIFO 已實現損益算 win_rate、交易權益曲線算 sharpe/max_drawdown；算不出來回 None，前端顯示 `--`。實測：無交易時 `sharpe/win_rate/max_drawdown: null`。
+**venv 端到端測試再修一處**：MTM 原本用「當前交易的價格」標記所有持倉（BTC 會被 ETH 價格標記，權益曲線失真、max_drawdown 假性 100%）→ 改為每 symbol 各自 last price 標記。實測來回一趟後：win_rate 66.7%、max_drawdown 0.0%、sharpe 1.35（真實值）。
 
 ### ~~M-5. signals 表無限膨脹~~
 **已修**：僅訊號非 HOLD 時寫入 signals 表（HOLD 每天 12 萬列問題消除）。
