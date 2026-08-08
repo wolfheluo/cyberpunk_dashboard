@@ -213,7 +213,7 @@ def fetch_all_data():
             "sma_1h_20": calc_sma(closes_1h,20),
             "ema_12": calc_ema(closes_1h,12) if closes_1h else price,
             "ema_26": calc_ema(closes_1h,26) if closes_1h else price,
-            "vol_surge": len(closes_1h) >= 2 and volume > (sum(float(k[5]) for k in klines_1h[-10:]) / min(len(klines_1h[-10:]), 1)) * 1.5,
+            "vol_surge": len(closes_1h) >= 2 and volume > (sum(float(k[5]) for k in klines_1h[-10:]) / max(len(klines_1h[-10:]), 1)) * 1.5,
             "closes_1h": closes_1h, "closes_4h": closes_4h
         }
 
@@ -406,7 +406,7 @@ def _run_backtest(klines_data, strategy_mod):
     total_return = (final_equity - INITIAL_CAPITAL_BT) / INITIAL_CAPITAL_BT * 100
 
     step = max(1, len(equity_curve) // 200)
-    sampled_eq = equity_curve[::step]
+    sampled_eq = equity_curve[WARMUP_DAYS::step]
     sampled_dates = dates[WARMUP_DAYS::step][:len(sampled_eq)]
 
     return {
