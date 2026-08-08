@@ -49,7 +49,7 @@ def download_klines(symbol):
                         reader = csv.reader(io.TextIOWrapper(f))
                         for row in reader:
                             # [open_time, open, high, low, close, volume, close_time, quote_vol, trades, taker_buy_vol, taker_buy_quote_vol, ignore]
-                            ts = int(row[0]) // 1000
+                            ts = int(row[0]) // 1_000_000
                             date_str = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
                             all_klines[date_str] = {
                                 "open": float(row[1]), "high": float(row[2]),
