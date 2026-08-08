@@ -449,7 +449,7 @@ function calcMACD(c,f,s,g){f=f||12;s=s||26;g=g||9;if(c.length<s)return[0,0,0];va
 function calcBB(c,p,k){p=p||20;k=k||2;var n=Math.min(c.length,p);if(n<2){var lc=c[c.length-1]||0;return[lc,lc,lc];}var win=c.slice(-n),mid=win.reduce(function(a,b){return a+b;},0)/n;var sd=Math.sqrt(win.reduce(function(a,b){return a+(b-mid)*(b-mid);},0)/n);return[mid+k*sd,mid,mid-k*sd];}
 function calcATRApprox(c,p){p=p||14;if(c.length<p+1)return 0;var s=0;for(var i=c.length-p;i<c.length;i++)s+=Math.abs(c[i]-c[i-1]);return s/p;}
 
-var PI=5000;
+var PI=1000; // 1s poll — high-frequency strategy evaluation (klines are cached server-side)
 function fetchData(){
   var start=Date.now();
   Promise.all([fetch('/api/data').then(function(r){return r.json();}),fetch('/api/positions').then(function(r){return r.json();}),fetch('/api/trades').then(function(r){return r.json();})])

@@ -8,6 +8,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import time
 import urllib.request
 import threading
 from datetime import datetime
@@ -86,16 +87,22 @@ def list_js_strategies():
             })
     return result
 
+# Strategy state persisted server-side between polls (node processes are stateless)
+_strategy_state = {}
+
 def run_js_strategy(strategy_file, ticker_infos):
     """Evaluate a JS strategy for all tickers via a node subprocess.
 
     ticker_infos: [{"id": "BTC", "ticker": {...}, "indicators": {...}}, ...]
+    Strategy state (e.g. priceHistory) is persisted server-side across polls.
     Returns {symbol: {"signal","confidence","factors"}} — empty dict on any failure.
     """
     if not HAS_NODE or not ticker_infos:
         return {}
     helper = os.path.join(STRATEGIES_DIR, "_run_strategy.js")
-    payload = json.dumps({"strategy": strategy_file, "tickers": ticker_infos})
+    payload = json.dumps({"strategy": strategy_file,
+                          "state": _strategy_state.get(strategy_file, {}),
+                          "tickers": ticker_infos})
     try:
         proc = subprocess.run(["node", helper], input=payload, capture_output=True,
                               text=True, timeout=15)
@@ -105,7 +112,9 @@ def run_js_strategy(strategy_file, ticker_infos):
         data = json.loads(out)
         if "error" in data:
             return {}
-        return data
+        if data.get("state") is not None:
+            _strategy_state[strategy_file] = data["state"]
+        return data.get("signals", {})
     except Exception:
         return {}
 
@@ -207,6 +216,20 @@ def fetch_json(url):
         with urllib.request.urlopen(req,timeout=10) as r:
             return json.loads(r.read().decode())
     except: return None
+
+# Cache klines so fast polls don't hammer the rate limit (indicators refresh slowly)
+_klines_cache = {}
+_klines_cache_ts = {}
+def fetch_klines_cached(symbol, interval, limit=100, ttl=60):
+    key = (symbol, interval)
+    now = time.time()
+    if key in _klines_cache and now - _klines_cache_ts.get(key, 0) < ttl:
+        return _klines_cache[key]
+    data = fetch_json(f"{BINANCE_BASE}/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}")
+    if data is not None:
+        _klines_cache[key] = data
+        _klines_cache_ts[key] = now
+    return data
 
 # ============================================================
 # TRADE EXECUTION
@@ -428,8 +451,8 @@ def fetch_all_data():
         high = pm["high"]; low = pm["low"]
         name = SYMBOL_NAMES.get(sym, sym)
 
-        klines_1h = fetch_json(f"{BINANCE_BASE}/api/v3/klines?symbol={symbol}&interval=1h&limit=100")
-        klines_4h = fetch_json(f"{BINANCE_BASE}/api/v3/klines?symbol={symbol}&interval=4h&limit=100")
+        klines_1h = fetch_klines_cached(symbol, "1h", 100)
+        klines_4h = fetch_klines_cached(symbol, "4h", 100)
         closes_1h = [float(k[4]) for k in klines_1h] if klines_1h else []
         closes_4h = [float(k[4]) for k in klines_4h] if klines_4h else []
         if should_record and pm:
@@ -800,6 +823,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 new_code = body.get("code", "")
                 if new_code:
                     with open(path, "w", encoding="utf-8") as f: f.write(new_code)
+                    _strategy_state.pop(fname, None)  # strategy rewritten — drop stale state
                     name, _ = _strategy_meta(new_code)
                     self._json(200, {"name": name or fname, "filename": fname})
                 else:
