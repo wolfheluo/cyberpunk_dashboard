@@ -252,7 +252,7 @@ function renderStrategyMatrix(){
 var pipePulse=0,pipeAnimId=null;
 function renderPipeline(pulse){
   var c=document.getElementById('pipelineCanvas');if(!c)return;
-  c.width=c.parentElement.clientWidth-16;
+  var p=c.parentElement;c.width=p.clientWidth-16;c.height=p.clientHeight-4;
   var ctx=c.getContext('2d'),w=c.width,h=c.height;
   var cx=15,cy=h/2+10,step=(w-30)/7;
   var t=pulse||0;
