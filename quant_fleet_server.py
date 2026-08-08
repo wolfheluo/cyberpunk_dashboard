@@ -19,17 +19,8 @@ def now_ts(fmt="%H:%M:%S"):
 # ============================================================
 # CONFIG
 # ============================================================
-SYMBOLS = [
-    "SOLUSDT","BTCUSDT","ETHUSDT","BNBUSDT","XRPUSDT",
-    "ADAUSDT","DOGEUSDT","AVAXUSDT","DOTUSDT","LINKUSDT",
-    "MATICUSDT","UNIUSDT","ATOMUSDT","APTUSDT","ARBUSDT","OPUSDT"
-]
-SYMBOL_NAMES = {
-    "SOL":"Solana","BTC":"Bitcoin","ETH":"Ethereum","BNB":"BNB",
-    "XRP":"Ripple","ADA":"Cardano","DOGE":"Dogecoin","AVAX":"Avalanche",
-    "DOT":"Polkadot","LINK":"Chainlink","MATIC":"Polygon","UNI":"Uniswap",
-    "ATOM":"Cosmos","APT":"Aptos","ARB":"Arbitrum","OP":"Optimism"
-}
+SYMBOLS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","ADAUSDT","HYPEUSDT","LINKUSDT"]
+SYMBOL_NAMES = {"BTC":"Bitcoin","ETH":"Ethereum","BNB":"BNB","SOL":"Solana","ADA":"Cardano","HYPE":"Hyperliquid","LINK":"Chainlink"}
 BINANCE_BASE = "https://api.binance.com"
 DB_PATH = "/root/quant_fleet.db"
 STRATEGIES_DIR = "/root/strategies"
@@ -87,6 +78,14 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at);
         CREATE INDEX IF NOT EXISTS idx_trades_created ON trades(created_at);
+        CREATE TABLE IF NOT EXISTS historical_klines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            date TEXT NOT NULL,
+            open REAL, high REAL, low REAL, close REAL, volume REAL,
+            UNIQUE(symbol, date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_klines_symbol ON historical_klines(symbol);
     """)
     # Init portfolio if empty
     row = conn.execute("SELECT id FROM portfolio WHERE id=1").fetchone()
@@ -394,6 +393,87 @@ def fetch_all_data():
     }
 
 # ============================================================
+# BACKTEST ENGINE (on-the-fly)
+# ============================================================
+INITIAL_CAPITAL_BT = 10_000.0
+TRADE_SIZE_PCT_BT = 0.05
+WARMUP_DAYS = 30
+
+def _run_backtest(klines_data, strategy_mod):
+    dates = sorted(klines_data.keys())
+    closes_history = []
+    equity_curve = []
+    cash = INITIAL_CAPITAL_BT
+    position = None  # {qty, entry}
+    trade_count = 0
+    buy_count = 0
+    sell_count = 0
+
+    for i, date in enumerate(dates):
+        k = klines_data[date]
+        price = k["close"]
+        closes_history.append(price)
+        if i < WARMUP_DAYS:
+            equity_curve.append(cash)
+            continue
+
+        rsi_val = calc_rsi(closes_history, 14)
+        sma20 = calc_sma(closes_history, 20)
+        indicators = {
+            "rsi_1h": rsi_val, "sma_4h": sma20, "sma_1h_20": sma20,
+            "ema_12": calc_ema(closes_history, 12),
+            "ema_26": calc_ema(closes_history, 26),
+            "vol_surge": k["volume"] > 0,
+            "closes_1h": closes_history[-30:], "closes_4h": closes_history[-30:]
+        }
+        ticker = {"id": "ASSET", "name": "Asset", "price": price, "volume": k["volume"]}
+
+        try:
+            out = strategy_mod.evaluate(ticker, indicators)
+            signal = out.get("signal", "HOLD")
+        except:
+            signal = "HOLD"
+
+        if signal == "BUY":
+            notional = min(cash * TRADE_SIZE_PCT_BT, cash)
+            if notional >= 10:
+                qty = notional / price
+                cash -= notional
+                if position:
+                    new_qty = position["qty"] + qty
+                    position["entry"] = (position["entry"] * position["qty"] + price * qty) / new_qty
+                    position["qty"] = new_qty
+                else:
+                    position = {"qty": qty, "entry": price}
+                trade_count += 1; buy_count += 1
+        elif signal == "SELL" and position:
+            notional = position["qty"] * price
+            cash += notional
+            position = None
+            trade_count += 1; sell_count += 1
+
+        pos_value = position["qty"] * price if position else 0
+        equity_curve.append(cash + pos_value)
+
+    if position and dates:
+        cash += position["qty"] * klines_data[dates[-1]]["close"]
+    final_equity = cash
+    total_return = (final_equity - INITIAL_CAPITAL_BT) / INITIAL_CAPITAL_BT * 100
+
+    step = max(1, len(equity_curve) // 200)
+    sampled_eq = equity_curve[::step]
+    sampled_dates = dates[WARMUP_DAYS::step][:len(sampled_eq)]
+
+    return {
+        "final_equity": round(final_equity, 2),
+        "total_return_pct": round(total_return, 2),
+        "trades_count": trade_count,
+        "buy_count": buy_count, "sell_count": sell_count,
+        "equity_curve": sampled_eq,
+        "dates": sampled_dates
+    }
+
+# ============================================================
 # HTTP
 # ============================================================
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -494,6 +574,29 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         self._json(400, {"error": f"Syntax error: {e}"})
                 else:
                     self._json(400, {"error": "No code provided"})
+
+        elif self.path == "/api/backtest/run":
+            # Run backtest on-the-fly: read historical_klines, run all strategies against ALL symbols
+            symbols_in_db = db_conn.execute("SELECT DISTINCT symbol FROM historical_klines").fetchall()
+            if not symbols_in_db:
+                self._json(400, {"error": "No historical data. Run: python3 backtest_runner.py --download"})
+                return
+
+            results = []
+            for (sym,) in symbols_in_db:
+                rows = db_conn.execute("SELECT date,open,high,low,close,volume FROM historical_klines WHERE symbol=? ORDER BY date", (sym,)).fetchall()
+                if not rows: continue
+                klines_data = {}
+                for r in rows:
+                    klines_data[r[0]] = {"open":r[1],"high":r[2],"low":r[3],"close":r[4],"volume":r[5]}
+
+                for fname, strat in strategy_registry.items():
+                    bt = _run_backtest(klines_data, strat["module"])
+                    bt["symbol"] = sym
+                    bt["strategy"] = strat["name"]
+                    results.append(bt)
+
+            self._json(200, {"backtests": results, "count": len(results)})
 
         else:
             self.send_error(404)

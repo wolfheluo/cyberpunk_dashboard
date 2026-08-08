@@ -185,9 +185,13 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
     <div id="page-backtest" class="page">
       <div class="flex flex-1 overflow-hidden">
         <div class="w-[45%] border-r border-[#1E222D] overflow-y-auto p-3">
-          <div class="text-sm text-[#00E5FF] mb-3">BACKTEST RESULTS (2025-01 → 2026-06, $10k initial)</div>
-          <div id="backtestSummary" class="mb-3">
-            <table class="bt-table" id="btTable"><thead><tr><th>Symbol</th><th>Strategy</th><th>Return</th><th>Final $</th><th>Trades</th></tr></thead><tbody><tr><td colspan="5" class="text-[#5A6275]">Loading...</td></tr></tbody></table>
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-sm text-[#00E5FF]">BACKTEST (2025-01 → 2026-06, $10k)</span>
+            <button class="btn-sm primary" onclick="runBacktest()" id="btnRunBacktest">▶ RUN BACKTEST</button>
+          </div>
+          <div id="backtestStatus" class="text-[11px] text-[#FFCC00] mb-2"></div>
+          <div id="backtestSummary">
+            <table class="bt-table" id="btTable"><thead><tr><th>Symbol</th><th>Strategy</th><th>Return</th><th>Final $</th><th>Trades</th></tr></thead><tbody><tr><td colspan="5" class="text-[#5A6275]">Press RUN BACKTEST to start</td></tr></tbody></table>
           </div>
         </div>
         <div class="flex-1 flex flex-col p-3 overflow-hidden">
@@ -292,17 +296,28 @@ function saveStrategy(){
 // ============================================================
 var btData=[];
 function loadBacktest(){
-  fetch('/api/backtests').then(function(r){return r.json();}).then(function(d){
+  drawBTCanvas();
+}
+function runBacktest(){
+  var btn=document.getElementById('btnRunBacktest'),st=document.getElementById('backtestStatus');
+  btn.disabled=true;btn.textContent='RUNNING...';st.textContent='Computing all strategies for all symbols...';
+  st.className='text-[11px] text-[#FFCC00] mb-2';
+  var start=Date.now();
+  fetch('/api/backtest/run',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+    if(d.error){st.textContent='ERROR: '+d.error;st.className='text-[11px] text-[#FF2A6D] mb-2';btn.disabled=false;btn.textContent='▶ RUN BACKTEST';return;}
     btData=d.backtests||[];
+    var dur=((Date.now()-start)/1000).toFixed(1);
+    st.textContent='Done in '+dur+'s — '+btData.length+' results';
+    st.className='text-[11px] text-[#00FF66] mb-2';
     var tb=document.getElementById('btTable').querySelector('tbody');tb.innerHTML='';
-    if(!btData.length){tb.innerHTML='<tr><td colspan="5" class="text-[#5A6275]">No backtest data yet. Run: python3 backtest_runner.py</td></tr>';drawBTCanvas();return;}
+    btData.sort(function(a,b){return b.total_return_pct-a.total_return_pct;});
     for(var i=0;i<btData.length;i++){
       var b=btData[i],cls=b.total_return_pct>=0?'up':'down',sign=b.total_return_pct>=0?'+':'';
       tb.innerHTML+='<tr><td class="text-[#00E5FF]">'+b.symbol+'</td><td>'+b.strategy+'</td>'+
         '<td class="'+cls+'">'+sign+b.total_return_pct+'%</td><td>$'+b.final_equity.toLocaleString()+'</td><td>'+b.trades_count+'</td></tr>';
     }
-    drawBTCanvas();
-  });
+    drawBTCanvas();btn.disabled=false;btn.textContent='▶ RUN BACKTEST';
+  }).catch(function(e){st.textContent='ERROR: '+e.message;st.className='text-[11px] text-[#FF2A6D] mb-2';btn.disabled=false;btn.textContent='▶ RUN BACKTEST';});
 }
 function drawBTCanvas(){
   var c=document.getElementById('btChart'),p=c.parentElement;
