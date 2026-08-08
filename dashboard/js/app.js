@@ -97,7 +97,7 @@ function saveStrategy(){
             var s=evaluateJSStrategy(DATA.tickers[i]);
             DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;
           }
-          if(currentPage==='dashboard')R(false);
+          if(DATA.tickers.length&&currentPage==='dashboard')R(false);
         }
       }
     });
@@ -389,6 +389,7 @@ function updatePrices(){
     }
   }
   // Update price DOM directly without redrawing whole rail
+  if(!DATA.tickers.length)return;
   var cards=document.querySelectorAll('#tickerRail .panel');
   for(var i=0;i<cards.length;i++){
     var tk=DATA.tickers[i],spans=cards[i].querySelectorAll('span');
@@ -403,7 +404,7 @@ function updatePrices(){
       DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;
     }
   }
-  if(currentPage==='dashboard')R(false);
+  if(DATA.tickers.length&&currentPage==='dashboard')R(false);
 }
 
 // ============================================================
@@ -439,7 +440,7 @@ function fetchData(){
     .then(function(results){var data=results[0],pos=results[1],trades=results[2],latency=Date.now()-start;
       for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}DATA.positions=pos.positions||[];DATA.trades=trades.trades||[];DATA.connected=true;DATA.latency_ms=latency;
       document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
-      if(currentPage==='dashboard')R(false);setTimeout(fetchData,PI);
+      if(DATA.tickers.length&&currentPage==='dashboard')R(false);setTimeout(fetchData,PI);
     }).catch(function(err){document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();setTimeout(fetchData,PI);});
 }
 
