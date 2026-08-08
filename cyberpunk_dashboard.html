@@ -185,9 +185,8 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
     <div id="page-backtest" class="page">
       <div class="flex flex-1 overflow-hidden">
         <div class="w-[45%] border-r border-[#1E222D] overflow-y-auto p-3">
-          <div class="flex items-center justify-between mb-3">
+          <div class="mb-3">
             <span class="text-sm text-[#00E5FF]">BACKTEST (2025-01 → 2026-06, $10k)</span>
-            <button class="btn-sm primary" onclick="runBacktest()" id="btnRunBacktest">▶ RUN BACKTEST</button>
           </div>
           <div id="backtestStatus" class="text-[11px] text-[#FFCC00] mb-2"></div>
           <div id="backtestSummary">
@@ -232,7 +231,7 @@ function switchPage(page){
   document.querySelectorAll('.nav-item').forEach(function(el){el.classList.toggle('active',el.getAttribute('data-page')===page);});
   document.querySelectorAll('.page').forEach(function(el){el.classList.toggle('active',el.id==='page-'+page);});
   if(page==='strategies')loadStrategyList();
-  if(page==='backtest')loadBacktest();
+  if(page==='backtest')runBacktest();
 }
 
 // ============================================================
@@ -299,8 +298,8 @@ function loadBacktest(){
   drawBTCanvas();
 }
 function runBacktest(){
-  var btn=document.getElementById('btnRunBacktest'),st=document.getElementById('backtestStatus');
-  btn.disabled=true;btn.textContent='RUNNING...';st.textContent='Computing all strategies for all symbols...';
+  var st=document.getElementById('backtestStatus');
+  st.textContent='Computing all strategies for all symbols...';
   st.className='text-[11px] text-[#FFCC00] mb-2';
   var start=Date.now();
   fetch('/api/backtest/run',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
@@ -340,8 +339,8 @@ function runBacktest(){
         '</tbody></table></div>';
       el.appendChild(div);
     }
-    drawBTCanvas();btn.disabled=false;btn.textContent='\u25b6 RUN BACKTEST';
-  }).catch(function(e){st.textContent='ERROR: '+e.message;st.className='text-[11px] text-[#FF2A6D] mb-2';btn.disabled=false;btn.textContent='\u25b6 RUN BACKTEST';});
+    drawBTCanvas();
+  }).catch(function(e){st.textContent='ERROR: '+e.message;st.className='text-[11px] text-[#FF2A6D] mb-2';});
 }
 function toggleBTGroup(header){
   var detail=header.nextElementSibling,arrow=header.querySelector('.bt-arrow');
