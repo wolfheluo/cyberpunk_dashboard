@@ -3,7 +3,6 @@
 
 import http.server
 import json
-import math
 import os
 import sqlite3
 import importlib.util
@@ -201,7 +200,7 @@ def fetch_all_data():
             "sma_1h_20": calc_sma(closes_1h,20),
             "ema_12": calc_ema(closes_1h,12) if closes_1h else price,
             "ema_26": calc_ema(closes_1h,26) if closes_1h else price,
-            "vol_surge": volume > volume*0.85*1.2,
+            "vol_surge": len(closes_1h) >= 2 and volume > (sum(float(k[5]) for k in klines_1h[-10:]) / min(len(klines_1h[-10:]), 1)) * 1.5,
             "closes_1h": closes_1h, "closes_4h": closes_4h
         }
 
@@ -225,12 +224,11 @@ def fetch_all_data():
             db_conn.commit()
 
         # Auto-execute trade on BUY/SELL
-        trade_info = None
         current_pos = positions_map.get(sym)
-        if signal == "BUY" and (not current_pos or current_pos["side"] != "BUY"):
-            trade_info = execute_trade(sym, "BUY", price, strategy_name, signal_id)
+        if signal == "BUY" and (not current_pos):
+            execute_trade(sym, "BUY", price, strategy_name, signal_id)
         elif signal == "SELL" and current_pos:
-            trade_info = execute_trade(sym, "SELL", price, strategy_name, signal_id)
+            execute_trade(sym, "SELL", price, strategy_name, signal_id)
 
         sparkline = closes_1h[-18:] if len(closes_1h)>=18 else closes_1h
         result["tickers"].append({
@@ -245,7 +243,6 @@ def fetch_all_data():
     # ---- Build logs ----
     ts = now_ts()
     buys=sells=0
-    trade_logs=[]
 
     # Re-read positions & trades after execution
     with db_lock:
@@ -286,13 +283,13 @@ def fetch_all_data():
         while len(exec_log)>200: exec_log.pop(0)
 
     # ---- KPI / Factors ----
-    strategies_list = ["RSI","SMA CROSS","VOL SURGE","COMPOSITE"]
+    strategy_names = [v["name"] for v in strategy_registry.values()][:4]
     timeframes_list = ["15m","1h","4h","1d"]
     cells=[]
-    for si,sn in enumerate(strategies_list):
+    for si,sn in enumerate(strategy_names):
         for ti,tf in enumerate(timeframes_list):
-            a = (sn=="RSI" and tf=="1h") or (sn=="SMA CROSS" and tf=="4h") or (sn=="VOL SURGE" and tf=="1h") or sn=="COMPOSITE"
-            cells.append([si,ti,"active" if a else "idle"])
+            active = (si == 0)  # first strategy active on all timeframes
+            cells.append([si,ti,"active" if active else "idle"])
 
     avg_rsi = sum(t["_rsi"] for t in result["tickers"])/max(len(result["tickers"]),1)
     price_above = sum(1 for t in result["tickers"] if t["price"]>t["_sma4h"])/max(len(result["tickers"]),1)
@@ -324,7 +321,7 @@ def fetch_all_data():
 
     return {
         "tickers":result["tickers"],
-        "strategy_matrix":{"strategies":strategies_list,"timeframes":timeframes_list,"cells":cells},
+        "strategy_matrix":{"strategies":strategy_names,"timeframes":timeframes_list,"cells":cells},
         "kpi":kpi,"factors":factors,
         "exec_log":list(exec_log[-50:]),
         "active_strategy":strategy_name,"order_flow":{}
@@ -352,7 +349,8 @@ def _run_backtest(klines_data, strategy_mod):
         price = k["close"]
         closes_history.append(price)
         if i < WARMUP_DAYS:
-            equity_curve.append(cash)
+            pos_value = position["qty"] * price if position else 0
+            equity_curve.append(cash + pos_value)
             continue
 
         rsi_val = calc_rsi(closes_history, 14)
@@ -474,22 +472,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._json(200, {"filename": fname, "code": content,
                     "name": strategy_registry.get(fname, {}).get("name", fname),
                     "description": strategy_registry.get(fname, {}).get("description", "")})
-
-        elif self.path == "/api/backtests":
-            rows = db_conn.execute(
-                "SELECT symbol,strategy,final_equity,total_return_pct,trades_count,buy_count,sell_count,equity_curve,dates_json,created_at FROM backtests ORDER BY total_return_pct DESC"
-            ).fetchall()
-            results = []
-            for r in rows:
-                results.append({
-                    "symbol": r[0], "strategy": r[1], "final_equity": r[2],
-                    "total_return_pct": r[3], "trades_count": r[4],
-                    "buy_count": r[5], "sell_count": r[6],
-                    "equity_curve": json.loads(r[7]) if r[7] else [],
-                    "dates": json.loads(r[8]) if r[8] else [],
-                    "created_at": r[9]
-                })
-            self._json(200, {"backtests": results})
 
         elif self.path == "/api/params/ref":
             ref = "parameter,type,description,example\n"                   "ticker.id,str,Ticker symbol (e.g. BTC),BTC\n"                   "ticker.name,str,Full name (e.g. Bitcoin),Bitcoin\n"                   "ticker.price,float,Current price in USDT,65100.50\n"                   "ticker.volume,float,24h quote volume in USDT,1500000000\n"                   "indicators.rsi_1h,float,RSI(14) on 1h closes (0-100),45.2\n"                   "indicators.sma_4h,float,SMA(20) on 4h closes,64800.30\n"                   "indicators.sma_1h_20,float,SMA(20) on 1h closes,65050.10\n"                   "indicators.ema_12,float,EMA(12) on 1h closes,65120.00\n"                   "indicators.ema_26,float,EMA(26) on 1h closes,65080.50\n"                   "indicators.vol_surge,bool,Volume > 1.2x average,True\n"                   "indicators.closes_1h,list[float],Last 30 1h close prices,[65100,65050,...]\n"                   "indicators.closes_4h,list[float],Last 30 4h close prices,[64800,64750,...]\n"                   "return.signal,str,BUY|SELL|HOLD|WAIT,BUY\n"                   "return.confidence,int,Signal confidence 0-100,82\n"                   "return.factors,dict,Optional factor values for logging,{'rsi':45.2}\n"
