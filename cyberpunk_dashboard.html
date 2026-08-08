@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FLEET x GRAPH - Cyberpunk Dashboard</title>
+<title>QUANT FLEET — Algorithmic Trading Command Center</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = {
@@ -43,298 +43,403 @@ tailwind.config = {
   .badge-green{background:#00FF6615;color:#00FF66;border:1px solid #00FF6630;padding:1px 8px;border-radius:3px;font-size:11px}
   .badge-yellow{background:#FFCC0015;color:#FFCC00;border:1px solid #FFCC0030;padding:1px 8px;border-radius:3px;font-size:11px}
   .badge-red{background:#FF2A6D15;color:#FF2A6D;border:1px solid #FF2A6D30;padding:1px 8px;border-radius:3px;font-size:11px}
-  .pill-running{background:#00FF6620;color:#00FF66;border:1px solid #00FF6640;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:600;animation:pulse 2s infinite}
+  .pill-live{background:#00FF6620;color:#00FF66;border:1px solid #00FF6640;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:600;animation:pulse 2s infinite}
   .panel{border:1px solid #1E222D;background:#0F1117}
+  .up{color:#00FF66}
+  .down{color:#FF2A6D}
 </style>
 </head>
 <body class="flex flex-col h-screen">
 
-<!-- TOP BAR -->
+<!-- ===== TOP BAR ===== -->
 <header class="flex items-center justify-between px-4 py-2 border-b border-[#1E222D] bg-[#0A0C12] shrink-0">
   <div class="flex items-center gap-6">
-    <span class="text-[#00E5FF] font-bold text-sm tracking-wider glow-cyan">FLEET x GRAPH</span>
-    <span class="text-[#5A6275] text-xs">// ROUTE RAIL <span class="text-[#00E5FF]">[16]</span></span>
+    <span class="text-[#00E5FF] font-bold text-sm tracking-wider glow-cyan">QUANT FLEET v2.4</span>
+    <span class="text-[#5A6275] text-xs">// WATCHLIST <span class="text-[#00E5FF]">[16]</span></span>
   </div>
   <div class="flex items-center gap-5 text-xs">
-    <span class="text-[#5A6275]">LAT <span class="text-[#00E5FF]">01.3ms</span></span>
-    <span class="text-[#5A6275]">FRESH <span class="text-[#00FF66]">CTX</span></span>
-    <span><span class="dot-green"></span><span class="text-[#00FF66]">ONLINE</span></span>
+    <span class="text-[#5A6275]">LAT <span class="text-[#00E5FF]">2.1ms</span></span>
+    <span class="text-[#5A6275]">MKT <span id="mktStatus" class="text-[#00FF66]">OPEN</span></span>
+    <span><span class="dot-green"></span><span class="text-[#00FF66]">LIVE</span></span>
   </div>
 </header>
 
-<!-- MAIN 3-COL LAYOUT -->
+<!-- ===== MAIN 3-COL LAYOUT ===== -->
 <main class="flex flex-1 overflow-hidden">
 
-  <!-- LEFT: ROUTE RAIL -->
+  <!-- ===== LEFT: TICKER WATCHLIST ===== -->
   <aside class="w-[23%] border-r border-[#1E222D] overflow-y-auto p-2 space-y-1.5 flex-shrink-0">
-    <div id="routeRail"></div>
+    <div id="tickerRail"></div>
   </aside>
 
-  <!-- CENTER -->
+  <!-- ===== CENTER ===== -->
   <section class="flex-1 flex flex-col overflow-hidden">
 
-    <!-- Panel A: Fan Out + Radar -->
+    <!-- Panel A: Signal Table + Factor Radar -->
     <div class="flex border-b border-[#1E222D]" style="height:42%">
+      <!-- Signal Table -->
       <div class="w-[55%] border-r border-[#1E222D] p-3 overflow-y-auto">
-        <div class="text-xs text-[#5A6275] mb-2">ROUTE  HITS  VERIFY</div>
-        <div class="space-y-0.5 text-xs" id="routeStatusList"></div>
+        <div class="text-xs text-[#5A6275] mb-2">TICKER  PRICE  SIGNAL  CONF</div>
+        <div class="space-y-0.5 text-xs" id="signalTable"></div>
       </div>
+      <!-- Radar + KPIs -->
       <div class="w-[45%] flex flex-col items-center justify-center p-3">
-        <canvas id="radarCanvas" width="200" height="200"></canvas>
+        <canvas id="factorRadar" width="210" height="210"></canvas>
         <div class="grid grid-cols-4 gap-2 mt-2 w-full">
-          <div class="text-center"><div class="text-[#00E5FF] text-sm font-bold">000.37</div><div class="text-[9px] text-[#5A6275]">SWAP/s</div></div>
-          <div class="text-center"><div class="text-[#00FF66] text-sm font-bold">010.61</div><div class="text-[9px] text-[#5A6275]">SPEEDUPx</div></div>
-          <div class="text-center"><div class="text-[#FFCC00] text-sm font-bold">00B.3B</div><div class="text-[9px] text-[#5A6275]">COST RED%</div></div>
-          <div class="text-center"><div class="text-[#FF2A6D] text-sm font-bold">008.67</div><div class="text-[9px] text-[#5A6275]">DILUTEx</div></div>
+          <div class="text-center"><div class="text-[#00E5FF] text-sm font-bold" id="kpiSharpe">2.41</div><div class="text-[9px] text-[#5A6275]">SHARPE</div></div>
+          <div class="text-center"><div class="text-[#00FF66] text-sm font-bold" id="kpiWin">68.3%</div><div class="text-[9px] text-[#5A6275]">WIN RATE</div></div>
+          <div class="text-center"><div class="text-[#FFCC00] text-sm font-bold" id="kpiPnL">+$42.8K</div><div class="text-[9px] text-[#5A6275]">P&amp;L DAY</div></div>
+          <div class="text-center"><div class="text-[#FF2A6D] text-sm font-bold" id="kpiDD">-4.2%</div><div class="text-[9px] text-[#5A6275]">MAX DD</div></div>
         </div>
       </div>
     </div>
 
-    <!-- Panel B: Phase Matrix -->
+    <!-- Panel B: Strategy Matrix -->
     <div class="border-b border-[#1E222D] p-2" style="height:10%">
-      <div class="text-[10px] text-[#5A6275] mb-1">WORKER x PHASE <span class="text-[#00E5FF]">(con - verify - merge)</span></div>
-      <div class="flex gap-1 h-[28px]" id="phaseMatrix"></div>
+      <div class="text-[10px] text-[#5A6275] mb-1">STRATEGY x TIMEFRAME <span class="text-[#00E5FF]">(1m - 5m - 15m - 1h - 4h - 1d)</span></div>
+      <div class="flex gap-1 h-[28px]" id="strategyMatrix"></div>
     </div>
 
-    <!-- Panel C: Pipeline Flow -->
+    <!-- Panel C: Order Flow -->
     <div class="border-b border-[#1E222D] p-2" style="height:14%">
-      <div class="text-[10px] text-[#5A6275] mb-1">"AND THEN" AUDIT -- does the next step read the previous output</div>
-      <canvas id="flowCanvas" width="700" height="50" class="w-full"></canvas>
-      <div class="text-center text-[10px] text-[#00FF66] glow-green mt-0.5">[ VERIFYING OH FRESH CONTENT... ]</div>
+      <div class="text-[10px] text-[#5A6275] mb-1">ORDER ROUTING -- smart router to minimize slippage across venues</div>
+      <canvas id="orderFlowCanvas" width="700" height="46" class="w-full"></canvas>
+      <div class="text-center text-[10px] text-[#00FF66] glow-green mt-0.5">[ EXECUTING -- monitoring 6 venues ]</div>
     </div>
 
-    <!-- Panel D+E: Orchestrator + Tally -->
+    <!-- Panel D+E: Strategy Engine + Positions -->
     <div class="flex flex-1 overflow-hidden">
+      <!-- Strategy Engine -->
       <div class="w-[62%] border-r border-[#1E222D] p-3 overflow-y-auto">
-        <pre class="text-xs leading-relaxed"><span class="text-[#5A6275]"># Orchestrator: build a graph, not a chain</span>
-<span class="text-[#FF2A6D]">graph</span> <span class="text-[#5A6275]">=</span> <span class="text-[#FFCC00]">Graph</span><span class="text-[#5A6275]">(workers=</span><span class="text-[#00FF66]">16</span><span class="text-[#5A6275]">, share_state=</span><span class="text-[#FF2A6D]">False</span><span class="text-[#5A6275]">)</span>
-<span class="text-[#FF2A6D]">for</span> route <span class="text-[#FF2A6D]">in</span> routes:<span class="text-[#5A6275]">          # fan out</span>
-    graph.<span class="text-[#FFCC00]">node</span>(audit, route)
-<span class="text-[#FF2A6D]">for</span> hit <span class="text-[#FF2A6D]">in</span> graph.results:<span class="text-[#5A6275]">     # fresh ctx</span>
-    graph.<span class="text-[#FFCC00]">node</span>(verify, hit, reuse=<span class="text-[#FF2A6D]">False</span>)
-<span class="text-[#00E5FF]">assert</span> verifier <span class="text-[#FF2A6D]">is not</span> author
-<span class="text-[#FFCC00]">merge</span>(confirmed_to_report)</pre>
+        <pre class="text-xs leading-relaxed"><span class="text-[#5A6275]"># Strategy Engine: multi-factor momentum + mean reversion</span>
+<span class="text-[#FF2A6D]">class</span> <span class="text-[#FFCC00]">AlphaFleet</span>:
+    <span class="text-[#FF2A6D]">def</span> <span class="text-[#00E5FF]">__init__</span>(<span class="text-[#5A6275]">self</span>):
+        <span class="text-[#5A6275]">self</span>.factors = [<span class="text-[#00FF66]">RSI</span>, <span class="text-[#00FF66]">MACD</span>, <span class="text-[#00FF66]">VOL_SURGE</span>, <span class="text-[#00FF66]">VWAP_DEV</span>]
+        <span class="text-[#5A6275]">self</span>.venue = <span class="text-[#00FF66]">SmartRouter</span>(exchanges=[<span class="text-[#FFCC00]">'NYSE'</span>,<span class="text-[#FFCC00]">'NASDAQ'</span>,<span class="text-[#FFCC00]">'ARCA'</span>])
+        <span class="text-[#5A6275]">self</span>.risk = <span class="text-[#FFCC00]">RiskManager</span>(max_drawdown=<span class="text-[#00FF66]">0.05</span>)
+
+    <span class="text-[#FF2A6D]">def</span> <span class="text-[#00E5FF]">scan</span>(<span class="text-[#5A6275]">self</span>, tickers):
+        <span class="text-[#FF2A6D]">for</span> t <span class="text-[#FF2A6D]">in</span> tickers:            <span class="text-[#5A6275]"># fan out</span>
+            composite = <span class="text-[#5A6275]">self</span>.evaluate(t)
+            <span class="text-[#5A6275]">self</span>.dispatch(t, composite)   <span class="text-[#5A6275]"># smart route</span>
+
+    <span class="text-[#FF2A6D]">def</span> <span class="text-[#00E5FF]">dispatch</span>(<span class="text-[#5A6275]">self</span>, ticker, score):
+        <span class="text-[#FF2A6D]">if</span> score > <span class="text-[#00E5FF]">0.8</span>: <span class="text-[#5A6275]">self</span>.venue.place(<span class="text-[#00FF66]">BUY</span>, ticker)
+        <span class="text-[#FF2A6D]">elif</span> score < <span class="text-[#00E5FF]">-0.5</span>: <span class="text-[#5A6275]">self</span>.venue.place(<span class="text-[#FF2A6D]">SELL</span>, ticker)</pre>
       </div>
+      <!-- Positions -->
       <div class="w-[38%] p-3 flex flex-col justify-between">
         <div class="space-y-1.5">
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">SCANNED</span> <span class="text-[#00E5FF]">20</span></div>
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">OK</span> <span class="text-[#5A6275]">8</span></div>
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">CONFIRMED</span> <span class="text-[#00FF66]">3</span></div>
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">PENDING</span> <span class="text-[#FFCC00]">3</span></div>
-          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">REJECTED</span> <span class="text-[#FF2A6D]">4</span></div>
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">LONG</span> <span class="text-[#00FF66]">12</span> <span class="text-[#5A6275]">+$31.2K</span></div>
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">SHORT</span> <span class="text-[#FF2A6D]">3</span> <span class="text-[#5A6275]">-$2.8K</span></div>
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">FLAT/MONITOR</span> <span class="text-[#5A6275]">28</span></div>
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">PENDING</span> <span class="text-[#FFCC00]">4</span></div>
+          <div class="flex justify-between text-xs"><span class="text-[#5A6275]">REJECTED</span> <span class="text-[#FF2A6D]">2</span></div>
         </div>
         <div>
-          <div class="text-right text-[#00E5FF] text-lg font-bold">6502</div>
-          <div class="text-right text-[10px] text-[#5A6275]">TOTAL</div>
-          <canvas id="tallyBar" width="150" height="14" class="ml-auto mt-1"></canvas>
+          <div class="text-right text-[#00E5FF] text-lg font-bold" id="navTotal">$1,847,203</div>
+          <div class="text-right text-[10px] text-[#5A6275]">AUM (NET)</div>
+          <canvas id="posBar" width="160" height="14" class="ml-auto mt-1"></canvas>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- RIGHT: STREAM LOG -->
+  <!-- ===== RIGHT: EXECUTION LOG ===== -->
   <aside class="w-[23%] border-l border-[#1E222D] overflow-y-auto p-2 flex-shrink-0">
-    <div class="text-[10px] text-[#00E5FF] mb-2 glow-cyan">// STREAM LOG <span class="text-[#00FF66]">[live]</span></div>
-    <div id="streamLog" class="text-[10px] leading-relaxed space-y-0.5"></div>
+    <div class="text-[10px] text-[#00E5FF] mb-2 glow-cyan">// EXECUTION LOG <span class="text-[#00FF66]">[live]</span></div>
+    <div id="execLog" class="text-[10px] leading-relaxed space-y-0.5"></div>
   </aside>
 
 </main>
 
-<!-- BOTTOM BAR -->
+<!-- ===== BOTTOM BAR ===== -->
 <footer class="flex items-center justify-between px-4 py-2 border-t border-[#1E222D] bg-[#0A0C12] shrink-0">
-  <span class="text-[#00E5FF] text-xs"><span class="text-[#5A6275]">&gt;</span> audit every route handler for a missing auth check <span class="animate-pulse">|</span></span>
-  <span class="pill-running">RUNNING GRAPH</span>
+  <span class="text-[#00E5FF] text-xs"><span class="text-[#5A6275]">&gt;</span> scan TSLA AAPL NVDA for RSI divergence + volume surge on 15m <span class="animate-pulse">|</span></span>
+  <span class="pill-live">LIVE TRADING</span>
 </footer>
 
 <script>
-var ROUTES = (function(){
-  var arr = [];
-  for(var i=0;i<16;i++){
-    var n=i+1;
-    var hits=Math.floor(Math.random()*8+1);
-    var sts=['CONFIRMED','CONFIRMED','PENDING','PENDING','REJECTED'];
-    arr.push({
-      id:'r'+String(n).padStart(2,'0'),
-      name:'ROUTE_'+String(n).padStart(2,'0'),
-      hits:hits,
-      metric:'0'+String(n*13).slice(-3),
-      ms:(Math.random()*5+0.3).toFixed(1),
-      status:sts[Math.floor(Math.random()*5)]
-    });
-  }
-  return arr;
-})();
+// ============================================================
+// TICKER DATA (simulated)
+// ============================================================
+function createTickers(){
+  var symbols=['TSLA','AAPL','NVDA','MSFT','GOOGL','META','AMZN','AMD','BTC','ETH','SOL','XRP','QQQ','SPY','IWM','DIA'];
+  var names=['Tesla','Apple','NVIDIA','Microsoft','Alphabet','Meta','Amazon','AMD','Bitcoin','Ethereum','Solana','Ripple','Nasdaq100','SP500','Russell2K','Dow30'];
+  var bases=[245.3,227.8,121.5,418.2,188.9,612.4,223.1,114.7,67250,3480,168.2,0.62,498.3,578.1,214.5,421.3];
+  return symbols.map(function(s,i){
+    return {
+      id:s,
+      name:names[i],
+      price:bases[i],
+      change:(Math.random()*8-3).toFixed(1),
+      changePct:(Math.random()*4-1.8).toFixed(2),
+      volume:Math.floor(Math.random()*50+5),
+      signal:['BUY','BUY','BUY','HOLD','HOLD','WAIT','SELL'][Math.floor(Math.random()*7)],
+      confidence:Math.floor(Math.random()*30+65)
+    };
+  });
+}
+var tickers=createTickers();
 
-// ---- ROUTE RAIL (Left) ----
-var rail=document.getElementById('routeRail');
-ROUTES.forEach(function(r,i){
+// ---- TICKER RAIL (Left) ----
+var rail=document.getElementById('tickerRail');
+tickers.forEach(function(t,i){
+  var chg=parseFloat(t.change);
+  var sign=chg>=0?'+':'';
+  var colorClass=chg>=0?'up':'down';
   var card=document.createElement('div');
   card.className='panel p-2 cursor-pointer hover:border-[#00E5FF40] transition-colors';
-  card.innerHTML='<div class="flex justify-between items-center mb-1">'+
-    '<span class="text-[#00E5FF] text-[11px] font-bold">'+r.name+'</span>'+
-    '<span class="text-[#5A6275] text-[10px]">'+r.metric+'.'+i+'k</span></div>'+
-    '<canvas class="w-full" height="18" data-route="'+r.name+'" style="width:100%"></canvas>'+
-    '<div class="text-[9px] text-[#5A6275] mt-1">NODES '+r.hits+'  QPS0  '+r.ms+'ms</div>';
+  card.innerHTML=
+    '<div class="flex justify-between items-center mb-1">'+
+      '<div><span class="text-[#00E5FF] text-[11px] font-bold">'+t.id+'</span>'+
+      '<span class="text-[#5A6275] text-[9px] ml-1.5">'+t.name+'</span></div>'+
+      '<span class="text-[#5A6275] text-[10px]">Vol '+t.volume+'M</span>'+
+    '</div>'+
+    '<canvas class="w-full" height="20" data-ticker="'+t.id+'" style="width:100%"></canvas>'+
+    '<div class="flex justify-between mt-0.5">'+
+      '<span class="text-[12px]">$'+t.price.toFixed(2)+'</span>'+
+      '<span class="'+colorClass+' text-[10px]">'+sign+t.change+' ('+sign+t.changePct+'%)</span>'+
+    '</div>';
   rail.appendChild(card);
 });
 
+// Draw sparklines
 function drawSparklines(){
-  var cans=document.querySelectorAll('#routeRail canvas'),c;
+  var cans=document.querySelectorAll('#tickerRail canvas'),c,j;
   for(c=0;c<cans.length;c++){
-    var can=cans[c],w=can.parentElement.clientWidth-4,j,pts=[];
+    var can=cans[c],w=can.parentElement.clientWidth-4,pts=[];
     can.width=w;
-    var ctx=can.getContext('2d'),h=can.height;
-    for(j=0;j<12;j++)pts.push(Math.random()*h*0.7+h*0.15);
-    ctx.strokeStyle='#00E5FF60';ctx.lineWidth=0.8;ctx.beginPath();
+    var ctx=can.getContext('2d'),h=can.height,base=h*0.5,amp=h*0.35;
+    var val=base;
+    for(j=0;j<18;j++){
+      val=val+(Math.random()-0.48)*amp*0.6;
+      val=Math.max(h*0.1,Math.min(h*0.9,val));
+      pts.push(val);
+    }
+    var last=pts[pts.length-1],first=pts[0],trend=last<first?'#FF2A6D80':'#00FF6680';
+    ctx.strokeStyle=trend;ctx.lineWidth=1;ctx.beginPath();
     for(j=0;j<pts.length;j++){var x=(j/(pts.length-1))*w;j===0?ctx.moveTo(x,pts[j]):ctx.lineTo(x,pts[j]);}
-    ctx.stroke();ctx.fillStyle='#00E5FF15';ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();ctx.fill();
+    ctx.stroke();
+    // Fill
+    ctx.fillStyle=trend.replace('80','15');ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();ctx.fill();
   }
 }
 setTimeout(drawSparklines,80);
 
-// ---- ROUTE STATUS TABLE ----
-var sl=document.getElementById('routeStatusList');
-ROUTES.forEach(function(r){
-  var b=r.status==='CONFIRMED'?'badge-cyan':r.status==='PENDING'?'badge-yellow':'badge-red';
-  sl.innerHTML+='<div class="flex items-center gap-4 py-0.5 border-b border-[#1E222D40]">'+
-    '<span class="text-[#00E5FF] w-8">'+r.id+'</span>'+
-    '<span class="text-[#5A6275] w-6">'+r.hits+'</span>'+
-    '<span class="'+b+'">'+r.status+'</span></div>';
+// ---- SIGNAL TABLE ----
+var st=document.getElementById('signalTable');
+tickers.forEach(function(t){
+  var b=t.signal==='BUY'?'badge-green':t.signal==='SELL'?'badge-red':t.signal==='WAIT'?'badge-yellow':'badge-cyan';
+  var chg=parseFloat(t.change);var ps=chg>=0?'up':'down';
+  st.innerHTML+='<div class="flex items-center gap-3 py-0.5 border-b border-[#1E222D40]">'+
+    '<span class="text-[#00E5FF] w-12">'+t.id+'</span>'+
+    '<span class="'+ps+' w-20 text-right">$'+t.price.toFixed(2)+'</span>'+
+    '<span class="'+b+'">'+t.signal+'</span>'+
+    '<span class="text-[#5A6275] text-[10px] ml-auto">'+t.confidence+'%</span></div>';
 });
 
-// ---- RADAR ----
-var radar=document.getElementById('radarCanvas');
+// ---- FACTOR RADAR ----
+var radar=document.getElementById('factorRadar');
 var rctx=radar.getContext('2d');
-var cx=100,cy=100,rr=80,i;
-var nodeCoords=[];
-for(i=0;i<20;i++){
-  var a=(i/20)*Math.PI*2-Math.PI/2;
-  var dist=rr*(0.5+Math.random()*0.5);
-  nodeCoords.push({nx:cx+Math.cos(a)*dist,ny:cy+Math.sin(a)*dist,confirmed:i<5||(i>10&&i<14)});
-}
+var cx=105,cy=105,rr=85;
+var factors=[
+  {label:'RSI',val:0.72},{label:'MACD',val:0.85},{label:'VOLUME',val:0.61},
+  {label:'MOMENTUM',val:0.78},{label:'VWAP',val:0.55},{label:'BBANDS',val:0.48},
+  {label:'ATR',val:0.33},{label:'OBV',val:0.67}
+];
+var nf=factors.length;
+
 function drawRadar(pulse){
-  rctx.clearRect(0,0,200,200);
-  for(i=1;i<=3;i++){rctx.beginPath();rctx.arc(cx,cy,rr*i/3,0,Math.PI*2);rctx.strokeStyle='#1E222D';rctx.lineWidth=0.5;rctx.stroke();}
-  for(i=0;i<20;i++){
-    var nd=nodeCoords[i];
-    rctx.beginPath();rctx.moveTo(cx,cy);rctx.lineTo(nd.nx,nd.ny);
-    rctx.strokeStyle='#1E222D60';rctx.lineWidth=0.4;rctx.stroke();
-    rctx.beginPath();rctx.arc(nd.nx,nd.ny,2.5,0,Math.PI*2);
-    rctx.fillStyle=nd.confirmed?'#00FF66':'#1E222D';rctx.fill();
-    if(i%3===0){rctx.fillStyle='#5A6275';rctx.font='7px monospace';rctx.fillText('r'+String(i+1).padStart(2,'0'),nd.nx-10,nd.ny-6);}
+  rctx.clearRect(0,0,210,210);
+  // Grid rings
+  for(var i=1;i<=4;i++){
+    rctx.beginPath();rctx.arc(cx,cy,rr*i/4,0,Math.PI*2);
+    rctx.strokeStyle='#1E222D';rctx.lineWidth=0.5;rctx.stroke();
   }
+  // Axis lines
+  var pts=[];
+  for(i=0;i<nf;i++){
+    var a=(i/nf)*Math.PI*2-Math.PI/2;
+    var dist=rr*factors[i].val;
+    pts.push({x:cx+Math.cos(a)*dist,y:cy+Math.sin(a)*dist});
+    // line
+    rctx.beginPath();rctx.moveTo(cx,cy);rctx.lineTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr);
+    rctx.strokeStyle='#1E222D50';rctx.lineWidth=0.3;rctx.stroke();
+    // label
+    var lx=cx+Math.cos(a)*(rr+14),ly=cy+Math.sin(a)*(rr+14)+3;
+    rctx.fillStyle='#5A6275';rctx.font='7px monospace';rctx.textAlign='center';
+    rctx.fillText(factors[i].label,lx,ly);
+  }
+  // Data polygon
+  rctx.beginPath();
+  for(i=0;i<nf;i++){i===0?rctx.moveTo(pts[i].x,pts[i].y):rctx.lineTo(pts[i].x,pts[i].y);}
+  rctx.closePath();
+  rctx.fillStyle='rgba(0,229,255,0.08)';rctx.fill();
+  rctx.strokeStyle='#00E5FF';rctx.lineWidth=1.2;rctx.stroke();
+  // Dots
+  for(i=0;i<nf;i++){
+    rctx.beginPath();rctx.arc(pts[i].x,pts[i].y,2.5,0,Math.PI*2);
+    rctx.fillStyle='#00E5FF';rctx.fill();
+  }
+  // Pulse
   if(pulse!==undefined){
-    rctx.beginPath();rctx.arc(cx,cy,pulse+1,0,Math.PI*2);
-    rctx.strokeStyle='rgba(0,229,255,'+(1-pulse/15)+')';rctx.lineWidth=1;rctx.stroke();
+    rctx.beginPath();rctx.arc(cx,cy,pulse+2,0,Math.PI*2);
+    rctx.strokeStyle='rgba(0,229,255,'+(1-pulse/20)+')';rctx.lineWidth=1;rctx.stroke();
   }
-  rctx.beginPath();rctx.arc(cx,cy,6,0,Math.PI*2);rctx.fillStyle='#00FF66';rctx.shadowColor='#00FF66';rctx.shadowBlur=14;rctx.fill();rctx.shadowBlur=0;
+  // Center dot
+  rctx.beginPath();rctx.arc(cx,cy,4,0,Math.PI*2);rctx.fillStyle='#00FF66';rctx.shadowColor='#00FF66';rctx.shadowBlur=10;rctx.fill();rctx.shadowBlur=0;
+  rctx.textAlign='start';
 }
 drawRadar(0);
 
-// ---- PHASE MATRIX ----
-var matrix=document.getElementById('phaseMatrix'),w,p;
-for(w=0;w<16;w++){
+// ---- STRATEGY MATRIX ----
+var matrix=document.getElementById('strategyMatrix');
+var strats=['MOMENTUM','MEAN REV','BREAKOUT','TREND','PAIRS','ARB','SCALP','ML ALPHA'];
+var tfs=['1m','5m','15m','1h','4h','1d'];
+for(var w=0;w<8;w++){
   var col=document.createElement('div');col.className='flex flex-col gap-px flex-1';
-  for(p=0;p<3;p++){
-    var bar=document.createElement('div');bar.className='flex-1 rounded-sm';bar.style.height='8px';
+  for(var p=0;p<6;p++){
+    var bar=document.createElement('div');bar.className='flex-1 rounded-sm';bar.style.height='4px';
     var v=Math.random();
-    bar.style.background=v>0.85?'linear-gradient(90deg,#00E5FF,#00E5FF40)':v>0.6?'linear-gradient(90deg,#00FF66,#00FF6640)':'#1E222D';
+    bar.style.background=v>0.82?'linear-gradient(90deg,#00E5FF,#00E5FF40)':v>0.55?'linear-gradient(90deg,#00FF66,#00FF6640)':v>0.25?'linear-gradient(90deg,#FFCC00,#FFCC0040)':'#1E222D';
     col.appendChild(bar);
   }
   matrix.appendChild(col);
 }
 
-// ---- PIPELINE FLOW ----
-var fc=document.getElementById('flowCanvas');
-fc.width=fc.parentElement.clientWidth-16;
-var fctx=fc.getContext('2d'),fw=fc.width,fh=fc.height;
-var fnodes=[
-  {x:30,y:fh/2,label:'r02',color:'#5A6275'},{x:90,y:fh/2,label:'r03',color:'#5A6275'},
-  {x:170,y:fh/2,label:'verify',color:'#00FF66'},{x:270,y:fh/2,label:'r05',color:'#5A6275'},
-  {x:330,y:fh/2,label:'r06',color:'#5A6275'},{x:400,y:fh/2,label:'merge',color:'#00FF66'},
-  {x:480,y:fh/2,label:'r08',color:'#5A6275'},{x:540,y:fh/2,label:'r09',color:'#5A6275'},
-  {x:610,y:fh/2,label:'report',color:'#00E5FF'}
+// ---- ORDER FLOW ----
+var ofc=document.getElementById('orderFlowCanvas');
+ofc.width=ofc.parentElement.clientWidth-16;
+var octx=ofc.getContext('2d'),ow=ofc.width,oh=ofc.height;
+var onodes=[
+  {x:25,y:oh/2,label:'TSLA',color:'#00FF66'},
+  {x:95,y:oh/2+6,label:'NYSE',color:'#1E222D'},
+  {x:95,y:oh/2-6,label:'ARCA',color:'#1E222D'},
+  {x:185,y:oh/2-8,label:'IEX',color:'#1E222D'},
+  {x:185,y:oh/2,label:'NASDAQ',color:'#1E222D'},
+  {x:185,y:oh/2+8,label:'BATS',color:'#1E222D'},
+  {x:280,y:oh/2,label:'ROUTER',color:'#00E5FF'},
+  {x:380,y:oh/2-6,label:'FILLED',color:'#00FF66'},
+  {x:380,y:oh/2+6,label:'PARTIAL',color:'#FFCC00'},
+  {x:470,y:oh/2,label:'DONE',color:'#00FF66'}
 ];
-var fedges=[[0,1,'no edge','#FF2A6D'],[1,2,'REAL EDGE','#00FF66'],[2,3,'no edge','#FF2A6D'],
-[3,4,'no edge','#FF2A6D'],[4,5,'REAL EDGE','#00FF66'],[5,6,'no edge','#FF2A6D'],
-[6,7,'no edge','#FF2A6D'],[7,8,'REAL EDGE','#00E5FF']];
-var e,n,ed;
-for(e=0;e<fedges.length;e++){
-  ed=fedges[e];
-  fctx.beginPath();fctx.moveTo(fnodes[ed[0]].x+10,fnodes[ed[0]].y);fctx.lineTo(fnodes[ed[1]].x-10,fnodes[ed[1]].y);
-  fctx.strokeStyle=ed[3];fctx.lineWidth=0.8;
-  if(ed[3]==='#FF2A6D')fctx.setLineDash([2,4]);else fctx.setLineDash([]);
-  fctx.stroke();fctx.setLineDash([]);
-  fctx.fillStyle=ed[3];fctx.font='7px monospace';
-  fctx.fillText(ed[2],(fnodes[ed[0]].x+fnodes[ed[1]].x)/2-16,fnodes[ed[0]].y-5);
+// Edges: source -> venue nodes
+octx.lineWidth=0.7;
+var oedges=[
+  [0,1,'route','#00E5FF40'],[0,2,'route','#00E5FF40'],
+  [1,3,'','#1E222D'],[2,4,'fill','#00FF6680'],[2,5,'','#1E222D'],
+  [3,6,'140@245.32','#00E5FF80'],
+  [4,6,'60@245.36','#00FF6680'],
+  [5,6,'','#1E222D'],
+  [6,7,'exec','#00FF6680'],[6,8,'exec','#FFCC0080'],
+  [7,9,'','#00FF6640'],[8,9,'retry','#FFCC0040']
+];
+for(var e=0;e<oedges.length;e++){
+  var ed=oedges[e];
+  octx.beginPath();octx.moveTo(onodes[ed[0]].x+8,onodes[ed[0]].y);
+  octx.lineTo(onodes[ed[1]].x-8,onodes[ed[1]].y);
+  octx.strokeStyle=ed[3];octx.stroke();
+  if(ed[2]){octx.fillStyle=ed[3].replace('80','');octx.font='6px monospace';octx.fillText(ed[2],(onodes[ed[0]].x+onodes[ed[1]].x)/2-10,onodes[ed[0]].y-3);}
 }
-for(n=0;n<fnodes.length;n++){
-  var nd=fnodes[n];
-  fctx.beginPath();fctx.arc(nd.x,nd.y,5,0,Math.PI*2);fctx.fillStyle=nd.color;fctx.fill();
-  if(nd.color==='#00FF66'||nd.color==='#00E5FF'){fctx.shadowColor=nd.color;fctx.shadowBlur=6;fctx.fill();fctx.shadowBlur=0;}
-  fctx.fillStyle='#5A6275';fctx.font='8px monospace';fctx.fillText(nd.label,nd.x-12,nd.y+16);
+// Draw node circles
+for(var n=0;n<onodes.length;n++){
+  var nd=onodes[n],r=nd.label==='TSLA'||nd.label==='ROUTER'?5:3;
+  octx.beginPath();octx.arc(nd.x,nd.y,r,0,Math.PI*2);
+  octx.fillStyle=nd.color;octx.fill();
+  if(nd.color==='#00FF66'||nd.color==='#00E5FF'){octx.shadowColor=nd.color;octx.shadowBlur=5;octx.fill();octx.shadowBlur=0;}
+  octx.fillStyle='#5A6275';octx.font='7px monospace';
+  octx.fillText(nd.label,nd.label==='ROUTER'?nd.x-18:nd.x-10,nd.y+(nd.label==='ROUTER'?18:12));
 }
 
-// ---- TALLY BAR ----
-var tb=document.getElementById('tallyBar'),tctx=tb.getContext('2d');
-var segs=[{pct:0.31,color:'#00E5FF'},{pct:0.12,color:'#5A6275'},{pct:0.05,color:'#00FF66'},{pct:0.05,color:'#FFCC00'},{pct:0.06,color:'#FF2A6D'},{pct:0.41,color:'#1E222D'}];
-var sx=0,s;
-for(s=0;s<segs.length;s++){var sw=tb.width*segs[s].pct;tctx.fillStyle=segs[s].color;tctx.fillRect(sx,0,sw,tb.height);sx+=sw;}
+// ---- POSITION BAR ----
+var pb=document.getElementById('posBar'),pctx=pb.getContext('2d');
+var psegs=[{pct:0.54,color:'#00FF66'},{pct:0.08,color:'#FF2A6D'},{pct:0.25,color:'#5A6275'},{pct:0.05,color:'#FFCC00'},{pct:0.03,color:'#FF2A6D'},{pct:0.05,color:'#1E222D'}];
+var sx=0;
+for(var s=0;s<psegs.length;s++){var sw=pb.width*psegs[s].pct;pctx.fillStyle=psegs[s].color;pctx.fillRect(sx,0,sw,pb.height);sx+=sw;}
 
-// ---- STREAM LOG ----
-var logEl=document.getElementById('streamLog'),logIdx=0,MAX_LOG=50;
+// ---- EXECUTION LOG ----
+var logEl=document.getElementById('execLog'),logIdx=0,MAX_LOG=60;
 function addLog(line){
   var div=document.createElement('div');div.innerHTML=line;div.className='py-px';logEl.appendChild(div);
   if(logEl.children.length>MAX_LOG)logEl.removeChild(logEl.firstChild);
   logEl.parentElement.scrollTop=logEl.parentElement.scrollHeight;
 }
 var INIT_LOG=[
-  "[0140] scan #01 guard present",
-  "[0141] route #01 indexed",
-  "[0142] edge #02 -> verify checked",
-  "[0143] queue depth 3 workers idle 3",
-  "[0144] ctx worker 05 opened fresh",
-  "[0150] verify #02 <span class='text-[#00FF66]'>CONFIRMED</span>",
-  "[0154] verify #04 <span class='text-[#FF2A6D]'>REJECTED</span>",
-  "[0156] scan #08 <span class='text-[#FFCC00]'>MISSING auth</span>",
-  "[0160] route #11 indexed",
-  "[0162] ctx worker 02 opened fresh",
-  "[0165] edge #03 -> merge validated",
-  "[0170] verify #07 <span class='text-[#00FF66]'>CONFIRMED</span>",
-  "[0174] queue depth 5 workers idle 3",
-  "[0178] verify #11 <span class='text-[#00FF66]'>CONFIRMED</span>",
-  "[0182] edge #07 -> verify failed",
-  "[0185] scan #03 guard present",
-  "[0190] verify #16 <span class='text-[#00FF66]'>CONFIRMED</span>",
-  "[0194] verify #09 <span class='text-[#FF2A6D]'>REJECTED</span>",
-  "[0198] merge pipeline complete"
+  "[09:30:01] MKT OPEN -- SPY 578.12 (+0.3%)",
+  "[09:30:04] scan #01 TSLA factors loaded [RSI:62 MACD:+ VOL:1.2x]",
+  "[09:30:04] signal TSLA <span class='text-[#00FF66]'>BUY</span> composite=0.84",
+  "[09:30:05] order TSLA BUY 200@245.30 routed NYSE+ARCA",
+  "[09:30:06] fill TSLA 140@245.32 NYSE <span class='text-[#00E5FF]'>partial</span>",
+  "[09:30:06] fill TSLA 60@245.36 ARCA <span class='text-[#00FF66]'>complete</span>",
+  "[09:30:08] scan #02 AAPL factors loaded [RSI:44 MACD:- VOL:0.8x]",
+  "[09:30:09] signal AAPL <span class='text-[#FFCC00]'>WAIT</span> composite=0.42",
+  "[09:30:12] scan #03 NVDA RSI divergence detected",
+  "[09:30:13] signal NVDA <span class='text-[#00FF66]'>BUY</span> composite=0.91",
+  "[09:30:14] order NVDA BUY 500@121.48 routed NASDAQ",
+  "[09:30:14] fill NVDA 500@121.48 <span class='text-[#00FF66]'>complete</span>",
+  "[09:30:17] risk check PASS -- exposure 62% limit 70%",
+  "[09:30:20] scan #05 META <span class='text-[#FF2A6D]'>SELL</span> composite=-0.61",
+  "[09:30:21] order META SELL 150@612.40 routed BATS",
+  "[09:30:22] fill META 150@612.38 BATS <span class='text-[#FFCC00]'>slippage -0.02</span>",
+  "[09:30:25] scan all tickers complete -- 16/16 evaluated",
+  "[09:30:28] P&amp;L update: day <span class='text-[#00FF66]'>+$42,812</span> | total <span class='text-[#00FF66]'>+$847,203</span>"
 ];
-var li;
-for(li=0;li<INIT_LOG.length;li++)addLog(INIT_LOG[li]);
+for(var li=0;li<INIT_LOG.length;li++)addLog(INIT_LOG[li]);
 
+// Live feed
 setInterval(function(){
+  var tid=tickers[Math.floor(Math.random()*tickers.length)];
+  var fills=['complete','partial','complete','complete','slippage'];
+  var fill=fills[Math.floor(Math.random()*fills.length)];
+  var fillColor=fill==='complete'?'text-[#00FF66]':'text-[#FFCC00]';
   var live=[
-    '['+String(200+logIdx).padStart(4,'0')+'] scan #'+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+' guard present',
-    '['+String(201+logIdx).padStart(4,'0')+'] route #'+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+' indexed',
-    '['+String(202+logIdx).padStart(4,'0')+'] ctx worker '+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+' opened fresh',
-    '['+String(203+logIdx).padStart(4,'0')+'] queue depth '+Math.floor(Math.random()*8+1)+' workers idle '+Math.floor(Math.random()*6+1),
-    '['+String(204+logIdx).padStart(4,'0')+"] verify #"+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+" <span class='text-[#00FF66]'>CONFIRMED</span>",
-    '['+String(205+logIdx).padStart(4,'0')+"] verify #"+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+" <span class='text-[#FF2A6D]'>REJECTED</span>",
-    '['+String(206+logIdx).padStart(4,'0')+"] scan #"+String(Math.floor(Math.random()*16+1)).padStart(2,'0')+" <span class='text-[#FFCC00]'>MISSING auth</span>"
+    '['+new Date().toTimeString().slice(0,8)+'] scan '+tid.id+' factors updated [RSI:'+Math.floor(Math.random()*30+40)+' MACD:'+(Math.random()>0.5?'+':'-')+' VOL:'+(Math.random()*2).toFixed(1)+'x]',
+    '['+new Date().toTimeString().slice(0,8)+'] signal '+tid.id+' <span class="text-[#00FF66]">BUY</span> composite='+(Math.random()*0.4+0.6).toFixed(2),
+    '['+new Date().toTimeString().slice(0,8)+'] order '+tid.id+' '+['BUY','SELL'][Math.floor(Math.random()*2)]+' '+Math.floor(Math.random()*500+50)+'@$'+tid.price.toFixed(2)+' routed',
+    '['+new Date().toTimeString().slice(0,8)+'] fill '+tid.id+' <span class="'+fillColor+'">'+fill+'</span>',
+    '['+new Date().toTimeString().slice(0,8)+'] risk check PASS -- exposure '+Math.floor(Math.random()*20+55)+'% limit 70%',
+    '['+new Date().toTimeString().slice(0,8)+'] venue latency: NYSE '+Math.floor(Math.random()*3+1)+'ms ARCA '+(Math.random()*2+0.5).toFixed(1)+'ms NASDAQ '+Math.floor(Math.random()*4+2)+'ms'
   ];
   addLog(live[Math.floor(Math.random()*live.length)]);
   logIdx++;
-},800+Math.random()*600);
+},700+Math.random()*800);
+
+// ---- ANIMATE PRICES ----
+setInterval(function(){
+  tickers.forEach(function(t){
+    t.price+=(Math.random()-0.48)*t.price*0.002;
+    t.change=(Math.random()*8-3).toFixed(1);
+    t.changePct=(Math.random()*4-1.8).toFixed(2);
+    t.volume=Math.floor(Math.random()*50+5);
+    t.confidence=Math.floor(Math.random()*30+65);
+  });
+  // Refresh signal table prices
+  var rows=document.querySelectorAll('#signalTable > div');
+  for(var i=0;i<Math.min(rows.length,tickers.length);i++){
+    var t=tickers[i],chg=parseFloat(t.change),ps=chg>=0?'up':'down';
+    var spans=rows[i].querySelectorAll('span');
+    if(spans.length>=2)spans[1].innerHTML='$'+t.price.toFixed(2);
+    if(spans.length>=4&&spans[3])spans[3].innerHTML=t.confidence+'%';
+  }
+  // Refresh KPI
+  document.getElementById('kpiSharpe').innerText=(Math.random()*1+1.8).toFixed(2);
+  document.getElementById('kpiWin').innerText=(Math.random()*15+60).toFixed(1)+'%';
+  var pnl=(Math.random()*30+25).toFixed(1);
+  document.getElementById('kpiPnL').innerText='+$'+(Math.random()*30+25).toFixed(1)+'K';
+  document.getElementById('kpiDD').innerText='-'+Math.abs(Math.random()*3+2).toFixed(1)+'%';
+  document.getElementById('navTotal').innerText='$'+(1847203+Math.floor(Math.random()*20000-5000)).toLocaleString();
+},5000);
 
 // ---- ANIMATE RADAR ----
 var pulseR=0;
 function animRadar(){
-  pulseR=(pulseR+0.3)%15;drawRadar(pulseR);requestAnimationFrame(animRadar);
+  pulseR=(pulseR+0.4)%20;drawRadar(pulseR);requestAnimationFrame(animRadar);
 }
 animRadar();
 
 // ---- ANIMATE SPARKLINES ----
-setInterval(drawSparklines,3000);
+setInterval(drawSparklines,2500);
 </script>
 </body>
 </html>
