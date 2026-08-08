@@ -231,8 +231,10 @@ def fetch_all_data():
             trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)
         elif signal == "SELL" and current_pos:
             trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)
-        if trade_result is None and signal in ("BUY","SELL"):
+        if trade_result is None and signal == "BUY":
             result["rejected"] = result.get("rejected", 0) + 1
+        elif trade_result is None and signal == "SELL":
+            result["failed"] = result.get("failed", 0) + 1
 
         sparkline = closes_1h[-18:] if len(closes_1h)>=18 else closes_1h
         result["tickers"].append({
@@ -328,7 +330,7 @@ def fetch_all_data():
         "strategy_matrix":{"strategies":strategy_names,"timeframes":timeframes_list,"cells":cells},
         "kpi":kpi,"factors":factors,
         "exec_log":list(exec_log[-50:]),
-        "active_strategy":strategy_name,"order_flow":{},"rejected":result.get("rejected",0)
+        "active_strategy":strategy_name,"order_flow":{},"rejected":result.get("rejected",0),"failed":result.get("failed",0)
     }
 
 # ============================================================
