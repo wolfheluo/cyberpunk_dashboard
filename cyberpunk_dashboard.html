@@ -304,20 +304,46 @@ function runBacktest(){
   st.className='text-[11px] text-[#FFCC00] mb-2';
   var start=Date.now();
   fetch('/api/backtest/run',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
-    if(d.error){st.textContent='ERROR: '+d.error;st.className='text-[11px] text-[#FF2A6D] mb-2';btn.disabled=false;btn.textContent='▶ RUN BACKTEST';return;}
+    if(d.error){st.textContent='ERROR: '+d.error;st.className='text-[11px] text-[#FF2A6D] mb-2';btn.disabled=false;btn.textContent='\u25b6 RUN BACKTEST';return;}
     btData=d.backtests||[];
     var dur=((Date.now()-start)/1000).toFixed(1);
-    st.textContent='Done in '+dur+'s — '+btData.length+' results';
+    st.textContent='Done in '+dur+'s \u2014 '+btData.length+' results';
     st.className='text-[11px] text-[#00FF66] mb-2';
-    var tb=document.getElementById('btTable').querySelector('tbody');tb.innerHTML='';
-    btData.sort(function(a,b){return b.total_return_pct-a.total_return_pct;});
+
+    // Group by strategy
+    var groups={},strategyOrder=[];
     for(var i=0;i<btData.length;i++){
-      var b=btData[i],cls=b.total_return_pct>=0?'up':'down',sign=b.total_return_pct>=0?'+':'';
-      tb.innerHTML+='<tr><td class="text-[#00E5FF]">'+b.symbol+'</td><td>'+b.strategy+'</td>'+
-        '<td class="'+cls+'">'+sign+b.total_return_pct+'%</td><td>$'+b.final_equity.toLocaleString()+'</td><td>'+b.trades_count+'</td></tr>';
+      var b=btData[i],s=b.strategy;
+      if(!groups[s]){groups[s]=[];strategyOrder.push(s);}
+      groups[s].push(b);
     }
-    drawBTCanvas();btn.disabled=false;btn.textContent='▶ RUN BACKTEST';
-  }).catch(function(e){st.textContent='ERROR: '+e.message;st.className='text-[11px] text-[#FF2A6D] mb-2';btn.disabled=false;btn.textContent='▶ RUN BACKTEST';});
+    // Sort each group by return desc
+    for(var s in groups){groups[s].sort(function(a,b){return b.total_return_pct-a.total_return_pct;});}
+
+    var el=document.getElementById('backtestSummary');
+    el.innerHTML='';
+    for(var gi=0;gi<strategyOrder.length;gi++){
+      var sn=strategyOrder[gi],items=groups[sn],avgRet=0,minRet=Infinity,maxRet=-Infinity;
+      for(var j=0;j<items.length;j++){avgRet+=items[j].total_return_pct;if(items[j].total_return_pct<minRet)minRet=items[j].total_return_pct;if(items[j].total_return_pct>maxRet)maxRet=items[j].total_return_pct;}
+      avgRet/=items.length;
+      var aCls=avgRet>=0?'up':'down',aSgn=avgRet>=0?'+':'',mCls=maxRet>=0?'text-[#00FF66]':'text-[#FF2A6D]',mnCls=minRet>=0?'text-[#00FF66]':'text-[#FF2A6D]';
+
+      var div=document.createElement('div');div.className='panel mb-1';
+      div.innerHTML='<div class="flex items-center justify-between p-2 cursor-pointer hover:bg-[#0F1117]" onclick="toggleBTGroup(this)" style="user-select:none">'+
+        '<span>\u25b6 <span class="text-[#00E5FF] text-[13px]">'+sn+'</span></span>'+
+        '<span class="text-[11px]"><span class="'+aCls+'">Avg: '+aSgn+avgRet.toFixed(1)+'%</span> <span class="text-[#5A6275]">|</span> Best: <span class="'+mCls+'">'+items[0].symbol+' '+(items[0].total_return_pct>=0?'+':'')+items[0].total_return_pct.toFixed(1)+'%</span> <span class="text-[#5A6275]">|</span> '+items.length+' symbols</span></div>'+
+        '<div class="hidden bt-detail px-2 pb-2"><table class="bt-table w-full">'+
+        items.map(function(b){var cl=b.total_return_pct>=0?'up':'down',sn=b.total_return_pct>=0?'+':'';return '<tr><td class="text-[#00E5FF] w-24">'+b.symbol+'</td><td class="'+cl+' w-20">'+sn+b.total_return_pct+'%</td><td class="w-24">$'+b.final_equity.toLocaleString()+'</td><td class="text-[#5A6275]">'+b.trades_count+' trades</td></tr>';}).join('')+
+        '</table></div>';
+      el.appendChild(div);
+    }
+    drawBTCanvas();btn.disabled=false;btn.textContent='\u25b6 RUN BACKTEST';
+  }).catch(function(e){st.textContent='ERROR: '+e.message;st.className='text-[11px] text-[#FF2A6D] mb-2';btn.disabled=false;btn.textContent='\u25b6 RUN BACKTEST';});
+}
+function toggleBTGroup(header){
+  var detail=header.nextElementSibling,arrow=header.querySelector('span');
+  if(detail.classList.contains('hidden')){detail.classList.remove('hidden');arrow.textContent='\u25bc';}
+  else{detail.classList.add('hidden');arrow.textContent='\u25b6';}
 }
 function drawBTCanvas(){
   var c=document.getElementById('btChart'),p=c.parentElement;
