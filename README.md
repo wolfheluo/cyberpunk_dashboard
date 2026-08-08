@@ -137,8 +137,14 @@ export `NAME`, `DESCRIPTION`, and an `evaluate(ticker, indicators)` function:
   NAME: "My Strategy",
   DESCRIPTION: "Brief description",
   evaluate: function (ticker, indicators) {
-    // ticker:     {id, name, price, volume, change_pct}
-    // indicators: {rsi, sma20, ema12, ema26, volSurge, closes}
+    // ticker: {id, name, price, volume, change_pct, high_24h, low_24h,
+    //          pct_from_high, pct_from_low, book}
+    //   book: {best_bid, best_ask, bid_qty, ask_qty, spread_pct, imbalance}
+    //         (order book summary — null in backtests, live-only)
+    // indicators: {rsi, sma20, sma50, ema12, ema26, ema50,
+    //              macd_line, macd_signal, macd_hist,
+    //              bb_upper, bb_middle, bb_lower, atr14,
+    //              rsi_4h, sma_4h, volSurge, closes}
     if (indicators.rsi < 30) return {signal: "BUY", confidence: 80};
     if (indicators.rsi > 70) return {signal: "SELL", confidence: 75};
     return {signal: "HOLD", confidence: 50};
@@ -149,6 +155,15 @@ export `NAME`, `DESCRIPTION`, and an `evaluate(ticker, indicators)` function:
 **Signal values**: `BUY`, `SELL`, `HOLD`, `WAIT`
 **Confidence**: 0–100
 **`factors`**: optional object logged to the `signals` table for audit
+
+**Parameter notes**:
+- `indicators.*` are computed from 1h closes (plus `rsi_4h` / `sma_4h` from 4h closes).
+- `ticker.book.*` comes from the Binance order book — available in live trading only;
+  backtests pass `book: null` (no historical order book).
+- In backtests (daily data), `rsi_4h`/`sma_4h` mirror the daily series; `high_24h`/`low_24h`
+  are the current candle's high/low.
+- Client-side hot-reload approximates `atr14` and the 4h values from the live tick
+  buffer; the server (authoritative, trade-executing) uses real candle data.
 
 The exact same `evaluate()` code path drives live trading (via `_run_strategy.js`)
 and backtesting (via `_run_backtest.js`), so results stay consistent.

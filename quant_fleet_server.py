@@ -155,6 +155,49 @@ def calc_ema(closes, period=12):
     for p in closes[1:]: ema=(p-ema)*mult+ema
     return ema
 
+def _ema_series(closes, period):
+    """Full EMA series (seed = first close)."""
+    if not closes: return []
+    mult = 2.0/(period+1)
+    out = [closes[0]]
+    for p in closes[1:]:
+        out.append((p-out[-1])*mult+out[-1])
+    return out
+
+def calc_macd(closes, fast=12, slow=26, signal=9):
+    """Return (macd_line, macd_signal, macd_hist) — 0s when series too short."""
+    if len(closes) < slow:
+        return 0.0, 0.0, 0.0
+    ef = _ema_series(closes, fast)
+    es = _ema_series(closes, slow)
+    macd_series = [f-s for f, s in zip(ef, es)]
+    sig_series = _ema_series(macd_series, signal)
+    line = macd_series[-1]
+    sig = sig_series[-1]
+    return line, sig, line - sig
+
+def calc_bollinger(closes, period=20, k=2.0):
+    """Return (upper, middle, lower) — middle (or last close) when too short."""
+    n = min(len(closes), period)
+    if n < 2:
+        last = closes[-1] if closes else 0
+        return last, last, last
+    window = closes[-n:]
+    mid = sum(window)/n
+    var = sum((x-mid)**2 for x in window)/n
+    sd = var ** 0.5
+    return mid + k*sd, mid, mid - k*sd
+
+def calc_atr(klines, period=14):
+    """ATR(period) from Binance kline arrays [[open,high,low,close,...], ...] — 0 when too short."""
+    if len(klines) < period+1:
+        return 0.0
+    trs = []
+    for i in range(1, len(klines)):
+        h = float(klines[i][2]); l = float(klines[i][3]); pc = float(klines[i-1][4])
+        trs.append(max(h-l, abs(h-pc), abs(l-pc)))
+    return sum(trs[-period:])/period
+
 # ============================================================
 # BINANCE
 # ============================================================
@@ -315,6 +358,12 @@ def fetch_all_data():
 
     # Pass 1: build ticker + indicators for every watchlist symbol, then evaluate
     # the active JS strategy ONCE via node subprocess (no more hardcoded HOLD).
+    book_map = {}
+    bt_raw = fetch_json(f"{BINANCE_BASE}/api/v3/ticker/bookTicker")
+    if bt_raw:
+        for b in bt_raw:
+            book_map[b["symbol"]] = b
+
     ticker_infos = []
     for symbol in SYMBOLS:
         sym = symbol.replace("USDT", "")
@@ -322,10 +371,13 @@ def fetch_all_data():
         if not pm:
             continue
         price = pm["price"]; change_pct = pm["change_pct"]; volume = pm["volume"]
+        high = pm["high"]; low = pm["low"]
         name = SYMBOL_NAMES.get(sym, sym)
 
-        klines_1h = fetch_json(f"{BINANCE_BASE}/api/v3/klines?symbol={symbol}&interval=1h&limit=30")
+        klines_1h = fetch_json(f"{BINANCE_BASE}/api/v3/klines?symbol={symbol}&interval=1h&limit=100")
+        klines_4h = fetch_json(f"{BINANCE_BASE}/api/v3/klines?symbol={symbol}&interval=4h&limit=100")
         closes_1h = [float(k[4]) for k in klines_1h] if klines_1h else []
+        closes_4h = [float(k[4]) for k in klines_4h] if klines_4h else []
         if should_record and pm:
             try:
                 with db_lock:
@@ -335,14 +387,45 @@ def fetch_all_data():
                 pass
 
         vol_surge = len(closes_1h) >= 2 and volume > (sum(float(k[5]) for k in (klines_1h or [])[-10:]) / max(len(klines_1h[-10:]), 1)) * 1.5
+        macd_line, macd_signal, macd_hist = calc_macd(closes_1h)
+        bb_up, bb_mid, bb_low = calc_bollinger(closes_1h)
+
+        b = book_map.get(symbol)
+        if b:
+            bid = float(b["bidPrice"]); ask = float(b["askPrice"])
+            bq = float(b["bidQty"]); aq = float(b["askQty"])
+            mid = (bid + ask) / 2
+            book = {"best_bid": bid, "best_ask": ask, "bid_qty": bq, "ask_qty": aq,
+                    "spread_pct": round((ask - bid) / mid * 100, 4) if mid else 0,
+                    "imbalance": round((bq - aq) / (bq + aq), 4) if (bq + aq) else 0}
+        else:
+            book = None
+
         ticker_infos.append({
             "id": sym,
-            "ticker": {"id": sym, "name": name, "price": price, "volume": volume, "change_pct": change_pct},
+            "ticker": {
+                "id": sym, "name": name, "price": price, "volume": volume, "change_pct": change_pct,
+                "high_24h": high, "low_24h": low,
+                "pct_from_high": round((price - high) / high * 100, 3) if high else 0,
+                "pct_from_low": round((price - low) / low * 100, 3) if low else 0,
+                "book": book
+            },
             "indicators": {
                 "rsi": round(calc_rsi(closes_1h, 14), 1),
                 "sma20": calc_sma(closes_1h, 20),
+                "sma50": calc_sma(closes_1h, 50),
                 "ema12": calc_ema(closes_1h, 12) if closes_1h else price,
                 "ema26": calc_ema(closes_1h, 26) if closes_1h else price,
+                "ema50": calc_ema(closes_1h, 50) if closes_1h else price,
+                "macd_line": round(macd_line, 6),
+                "macd_signal": round(macd_signal, 6),
+                "macd_hist": round(macd_hist, 6),
+                "bb_upper": round(bb_up, 4),
+                "bb_middle": round(bb_mid, 4),
+                "bb_lower": round(bb_low, 4),
+                "atr14": round(calc_atr(klines_1h or [], 14), 4),
+                "rsi_4h": round(calc_rsi(closes_4h, 14), 1),
+                "sma_4h": calc_sma(closes_4h, 20),
                 "volSurge": vol_surge,
                 "closes": closes_1h
             }
@@ -539,7 +622,44 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "description": desc or ""})
 
         elif self.path == "/api/params/ref":
-            ref = "parameter,type,description,example\n"                   "ticker.id,string,Symbol (e.g. BTC),BTC\n"                   "ticker.name,string,Full name (e.g. Bitcoin),Bitcoin\n"                   "ticker.price,number,Current price in USDT,65100.50\n"                   "ticker.volume,number,24h quote volume,1500000000\n"                   "ticker.change_pct,number,24h price change %,2.35\n"                   "indicators.rsi,number,RSI(14) 0-100,45.2\n"                   "indicators.sma20,number,SMA(20),65050.10\n"                   "indicators.ema12,number,EMA(12),65120.00\n"                   "indicators.ema26,number,EMA(26),65080.50\n"                   "indicators.volSurge,boolean,Volume > 1.5x average,true\n"                   "indicators.closes,array[number],Last 30 close prices,[65100,65050,...]\n"                   "return.signal,string,BUY|SELL|HOLD|WAIT,BUY\n"                   "return.confidence,number,0-100,82\n"                   "return.factors,object,Optional factor values for logging,{rsi:45.2}\n"
+            ref = (
+                "parameter,type,description,example\n"
+                "ticker.id,string,Symbol (e.g. BTC),BTC\n"
+                "ticker.name,string,Full name (e.g. Bitcoin),Bitcoin\n"
+                "ticker.price,number,Current price in USDT,65100.50\n"
+                "ticker.volume,number,24h quote volume,1500000000\n"
+                "ticker.change_pct,number,24h price change %,2.35\n"
+                "ticker.high_24h,number,24h high price,65500.00\n"
+                "ticker.low_24h,number,24h low price,64000.00\n"
+                "ticker.pct_from_high,number,% below 24h high,-0.61\n"
+                "ticker.pct_from_low,number,% above 24h low,1.72\n"
+                "ticker.book.best_bid,number,Best bid price,65100.10\n"
+                "ticker.book.best_ask,number,Best ask price,65100.50\n"
+                "ticker.book.bid_qty,number,Best bid quantity,0.85\n"
+                "ticker.book.ask_qty,number,Best ask quantity,1.20\n"
+                "ticker.book.spread_pct,number,Spread as % of mid,0.0006\n"
+                "ticker.book.imbalance,number,(bid_qty-ask_qty)/(bid_qty+ask_qty) -1..1,0.17\n"
+                "indicators.rsi,number,RSI(14) on 1h closes 0-100,45.2\n"
+                "indicators.sma20,number,SMA(20) on 1h closes,65050.10\n"
+                "indicators.sma50,number,SMA(50) on 1h closes,64800.30\n"
+                "indicators.ema12,number,EMA(12) on 1h closes,65120.00\n"
+                "indicators.ema26,number,EMA(26) on 1h closes,65080.50\n"
+                "indicators.ema50,number,EMA(50) on 1h closes,64950.20\n"
+                "indicators.macd_line,number,MACD line (12/26) on 1h closes,12.35\n"
+                "indicators.macd_signal,number,MACD signal line (EMA9 of MACD),10.10\n"
+                "indicators.macd_hist,number,MACD histogram (line-signal),2.25\n"
+                "indicators.bb_upper,number,Bollinger upper (20,2σ),65800.00\n"
+                "indicators.bb_middle,number,Bollinger middle (SMA20),65050.10\n"
+                "indicators.bb_lower,number,Bollinger lower (20,2σ),64300.20\n"
+                "indicators.atr14,number,ATR(14) on 1h closes,420.5\n"
+                "indicators.rsi_4h,number,RSI(14) on 4h closes,52.1\n"
+                "indicators.sma_4h,number,SMA(20) on 4h closes,64980.00\n"
+                "indicators.volSurge,boolean,Volume > 1.5x recent 1h average,true\n"
+                "indicators.closes,array[number],Last 100 1h close prices,[65100,65050,...]\n"
+                "return.signal,string,BUY|SELL|HOLD|WAIT,BUY\n"
+                "return.confidence,number,0-100,82\n"
+                "return.factors,object,Optional factor values for logging,{rsi:45.2}\n"
+            )
             body = ref.encode()
             self.send_response(200)
             self.send_header("Content-Type","text/csv; charset=utf-8")

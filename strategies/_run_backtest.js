@@ -38,6 +38,41 @@ function calcEMA(c, p) {
   for (let i = 1; i < c.length; i++) e = (c[i] - e) * m + e;
   return e;
 }
+function emaSeries(c, p) {
+  if (!c.length) return [];
+  const m = 2 / (p + 1);
+  const out = [c[0]];
+  for (let i = 1; i < c.length; i++) out.push((c[i] - out[out.length - 1]) * m + out[out.length - 1]);
+  return out;
+}
+function calcMACD(c, fast, slow, signal) {
+  fast = fast || 12; slow = slow || 26; signal = signal || 9;
+  if (c.length < slow) return [0, 0, 0];
+  const ef = emaSeries(c, fast), es = emaSeries(c, slow);
+  const macdSeries = ef.map((f, i) => f - es[i]);
+  const sigSeries = emaSeries(macdSeries, signal);
+  const line = macdSeries[macdSeries.length - 1], sig = sigSeries[sigSeries.length - 1];
+  return [line, sig, line - sig];
+}
+function calcBB(c, period, k) {
+  period = period || 20; k = k || 2;
+  const n = Math.min(c.length, period);
+  if (n < 2) { const last = c[c.length - 1] || 0; return [last, last, last]; }
+  const win = c.slice(-n);
+  const mid = win.reduce((a, b) => a + b, 0) / n;
+  const sd = Math.sqrt(win.reduce((a, b) => a + (b - mid) ** 2, 0) / n);
+  return [mid + k * sd, mid, mid - k * sd];
+}
+function calcATR(klines, period) {
+  period = period || 14;
+  if (klines.length < period + 1) return 0;
+  const trs = [];
+  for (let i = 1; i < klines.length; i++) {
+    const h = klines[i].high, l = klines[i].low, pc = klines[i - 1].close;
+    trs.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+  }
+  return trs.slice(-period).reduce((a, b) => a + b, 0) / period;
+}
 
 function backtestOne(strategy, symbol, klines) {
   const closesHistory = [];
@@ -54,15 +89,31 @@ function backtestOne(strategy, symbol, klines) {
       equityCurve.push(cash + (position ? position.qty * price : 0));
       continue;
     }
+    const macd = calcMACD(closesHistory);
+    const bb = calcBB(closesHistory);
     const indicators = {
       rsi: calcRSI(closesHistory, 14),
       sma20: calcSMA(closesHistory, 20),
+      sma50: calcSMA(closesHistory, 50),
       ema12: calcEMA(closesHistory, 12),
       ema26: calcEMA(closesHistory, 26),
+      ema50: calcEMA(closesHistory, 50),
+      macd_line: macd[0], macd_signal: macd[1], macd_hist: macd[2],
+      bb_upper: bb[0], bb_middle: bb[1], bb_lower: bb[2],
+      atr14: calcATR(klines, 14),
+      // Daily data only — 4h values mirror the daily series in backtests.
+      rsi_4h: calcRSI(closesHistory, 14),
+      sma_4h: calcSMA(closesHistory, 20),
       volSurge: k.volume > 0,
-      closes: closesHistory.slice(-30)
+      closes: closesHistory.slice(-100)
     };
-    const ticker = {id: symbol, name: symbol, price: price, volume: k.volume, change_pct: 0};
+    const ticker = {
+      id: symbol, name: symbol, price: price, volume: k.volume, change_pct: 0,
+      high_24h: k.high, low_24h: k.low,
+      pct_from_high: k.high ? (price - k.high) / k.high * 100 : 0,
+      pct_from_low: k.low ? (price - k.low) / k.low * 100 : 0,
+      book: null  // no historical order book — book params are live-only
+    };
     let signal = 'HOLD';
     try {
       const out = strategy.evaluate(ticker, indicators) || {};

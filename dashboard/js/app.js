@@ -351,17 +351,19 @@ function renderExecLog(){
 // ============================================================
 // FETCH LOOP
 // ============================================================
-// Binance WebSocket — real-time price updates
-var binanceWS=null,wsPrices={};
+// Binance WebSocket — real-time price updates + order book (combined stream)
+var binanceWS=null,wsPrices={},wsBook={};
 function connectBinanceWS(){
   if(binanceWS)try{binanceWS.close();}catch(e){}
-  binanceWS=new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
+  binanceWS=new WebSocket('wss://stream.binance.com:9443/stream?streams=!miniTicker@arr/!bookTicker');
   binanceWS.onmessage=function(e){
     try{
-      var data=JSON.parse(e.data);
-      if(Array.isArray(data)){
-        data.forEach(function(t){wsPrices[t.s]=parseFloat(t.c);});
+      var msg=JSON.parse(e.data),data=msg.data;
+      if(msg.stream&&msg.stream.indexOf('miniTicker')===0&&Array.isArray(data)){
+        data.forEach(function(t){wsPrices[t.s]={price:parseFloat(t.c),high:parseFloat(t.h),low:parseFloat(t.l)};});
         updatePrices();
+      }else if(msg.stream&&msg.stream.indexOf('bookTicker')===0&&data&&data.s){
+        wsBook[data.s]={best_bid:parseFloat(data.b),best_ask:parseFloat(data.a),bid_qty:parseFloat(data.B),ask_qty:parseFloat(data.A)};
       }
     }catch(ex){}
   };
@@ -372,12 +374,12 @@ var _priceBuffer={};
 function updatePrices(){
   if(!DATA.tickers)return;
   for(var i=0;i<DATA.tickers.length;i++){
-    var sym=DATA.tickers[i].id,p=wsPrices[sym+'USDT'];
-    if(p){
-      DATA.tickers[i].price=p;
+    var sym=DATA.tickers[i].id,w=wsPrices[sym+'USDT'];
+    if(w){
+      DATA.tickers[i].price=w.price;
       // Accumulate live price buffer for indicators
       if(!_priceBuffer[sym])_priceBuffer[sym]=[];
-      _priceBuffer[sym].push(p);
+      _priceBuffer[sym].push(w.price);
       if(_priceBuffer[sym].length>100)_priceBuffer[sym].shift();
     }
   }
@@ -415,9 +417,26 @@ function evaluateJSStrategy(ticker){
   var closes=_priceBuffer[ticker.id]||[],price=ticker.price;
   var rsi=calcRSI(closes,14),sma20=calcSMA(closes,20),ema12=calcEMA(closes,12),ema26=calcEMA(closes,26);
   var volSurge=ticker.volume>0;
+  var macd=calcMACD(closes),bb=calcBB(closes);
+  var w=wsPrices[ticker.id+'USDT']||{};
+  var b=wsBook[ticker.id+'USDT'];
+  var book=b?{best_bid:b.best_bid,best_ask:b.best_ask,bid_qty:b.bid_qty,ask_qty:b.ask_qty,
+    spread_pct:b.best_ask&&b.best_bid?((b.best_ask-b.best_bid)/((b.best_ask+b.best_bid)/2)*100):0,
+    imbalance:(b.bid_qty+b.ask_qty)?(b.bid_qty-b.ask_qty)/(b.bid_qty+b.ask_qty):0}:null;
   try{
     if(activeJSStrategy&&typeof activeJSStrategy.evaluate==='function'){
-      return activeJSStrategy.evaluate({id:ticker.id,name:ticker.name,price:price,volume:ticker.volume_m,change_pct:ticker.change_pct},{rsi:rsi,sma20:sma20,ema12:ema12,ema26:ema26,volSurge:volSurge,closes:closes});
+      return activeJSStrategy.evaluate({
+        id:ticker.id,name:ticker.name,price:price,volume:ticker.volume_m,change_pct:ticker.change_pct,
+        high_24h:w.high||ticker.high_24h,low_24h:w.low||ticker.low_24h,
+        pct_from_high:w.high?((price-w.high)/w.high*100):0,
+        pct_from_low:w.low?((price-w.low)/w.low*100):0,
+        book:book
+      },{rsi:rsi,sma20:sma20,sma50:calcSMA(closes,50),ema12:ema12,ema26:ema26,ema50:calcEMA(closes,50),
+        macd_line:macd[0],macd_signal:macd[1],macd_hist:macd[2],
+        bb_upper:bb[0],bb_middle:bb[1],bb_lower:bb[2],
+        atr14:calcATRApprox(closes,14),
+        rsi_4h:rsi,sma_4h:sma20, // approximate: client buffer is live ticks, not 4h candles
+        volSurge:volSurge,closes:closes});
     }
   }catch(e){}
   return {signal:"HOLD",confidence:50};
@@ -425,6 +444,10 @@ function evaluateJSStrategy(ticker){
 function calcRSI(c,p){p=p||14;if(c.length<p+1)return 50;var g=0,l=0;for(var i=1;i<=p;i++){var d=c[c.length-i]-c[c.length-i-1];if(d>0)g+=d;else l-=d;}if(l===0)return 100;return 100-(100/(1+g/l));}
 function calcSMA(c,p){p=p||20;if(!c.length)return 0;var s=0,n=Math.min(c.length,p);for(var i=0;i<n;i++)s+=c[c.length-1-i];return s/n;}
 function calcEMA(c,p){p=p||12;if(c.length<2)return c[c.length-1]||0;var m=2/(p+1),e=c[0];for(var i=1;i<c.length;i++)e=(c[i]-e)*m+e;return e;}
+function emaSeries(c,p){if(!c.length)return[];var m=2/(p+1),o=[c[0]];for(var i=1;i<c.length;i++)o.push((c[i]-o[o.length-1])*m+o[o.length-1]);return o;}
+function calcMACD(c,f,s,g){f=f||12;s=s||26;g=g||9;if(c.length<s)return[0,0,0];var ef=emaSeries(c,f),es=emaSeries(c,s),ms=[];for(var i=0;i<ef.length;i++)ms.push(ef[i]-es[i]);var ss=emaSeries(ms,g),line=ms[ms.length-1],sig=ss[ss.length-1];return[line,sig,line-sig];}
+function calcBB(c,p,k){p=p||20;k=k||2;var n=Math.min(c.length,p);if(n<2){var lc=c[c.length-1]||0;return[lc,lc,lc];}var win=c.slice(-n),mid=win.reduce(function(a,b){return a+b;},0)/n;var sd=Math.sqrt(win.reduce(function(a,b){return a+(b-mid)*(b-mid);},0)/n);return[mid+k*sd,mid,mid-k*sd];}
+function calcATRApprox(c,p){p=p||14;if(c.length<p+1)return 0;var s=0;for(var i=c.length-p;i<c.length;i++)s+=Math.abs(c[i]-c[i-1]);return s/p;}
 
 var PI=5000;
 function fetchData(){
