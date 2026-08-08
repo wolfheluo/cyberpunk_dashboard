@@ -279,7 +279,7 @@ function renderPipeline(pulse){
     for(var j=0;j<activeEdges.length;j++){if(activeEdges[j][0]===e[0]&&activeEdges[j][1]===e[1]){isActive=true;break;}}
     ctx.beginPath();ctx.moveTo(a.x+12,a.y);ctx.lineTo(b.x-12,b.y);
     ctx.strokeStyle=e[3];ctx.setLineDash(e[3]==='#FF2A6D'?[2,4]:[]);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle=e[3];ctx.font='11px monospace';ctx.fillText(e[2],(a.x+b.x)/2-12,a.y-5);
+    ctx.fillStyle=e[3];ctx.font='11px monospace';ctx.fillText(e[2],(a.x+b.x)/2-12,a.y+10);
   }
   // Flowing dot on active path
   if(t!==undefined){
