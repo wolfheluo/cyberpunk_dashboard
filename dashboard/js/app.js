@@ -311,13 +311,19 @@ function animatePipeline(){
   if(!document.getElementById('pipelineCanvas')){pipeAnimId=null;return;}
   pipePulse=(pipePulse+0.03)%(8*2);
   if(DATA&&DATA.tickers){
-    var hasBuy=false,hasReject=(DATA.rejected||0)>0,hasFail=(DATA.failed||0)>0;
-    for(var i=0;i<DATA.tickers.length;i++){if(DATA.tickers[i].signal==='BUY'){hasBuy=true;break;}}
-    if(hasReject&&pipeHasSignal!=='exec'){pipeHasSignal='reject';pipeSignalAge=0;}
-    else if(hasFail&&pipeHasSignal!=='exec'){pipeHasSignal='fail';pipeSignalAge=0;}
-    else if(hasBuy&&pipeHasSignal!=='exec'){pipeHasSignal='exec';pipeSignalAge=0;}
-    else if(!hasBuy&&!hasReject&&!hasFail){pipeSignalAge++;}
-    if(!hasBuy&&!hasReject&&!hasFail&&pipeSignalAge>60)pipeHasSignal='wait';
+    // Both BUY and SELL signals drive the exec path (short selling included).
+    var hasSignal=false,hasReject=(DATA.rejected||0)>0,hasFail=(DATA.failed||0)>0;
+    for(var i=0;i<DATA.tickers.length;i++){
+      var sg=DATA.tickers[i].signal;
+      if(sg==='BUY'||sg==='SELL'){hasSignal=true;break;}
+    }
+    if(hasSignal){pipeHasSignal='exec';pipeSignalAge=0;}
+    else if(hasReject){pipeHasSignal='reject';pipeSignalAge=0;}
+    else if(hasFail){pipeHasSignal='fail';pipeSignalAge=0;}
+    else {pipeSignalAge++;}
+    // Keep the animation alive long enough for the orb to reach DONE after
+    // the signal clears (full exec path ≈ 4.4s at 60fps → 300 frames).
+    if(pipeSignalAge>300)pipeHasSignal='wait';
   }
   renderPipeline(pipePulse);
   pipeAnimId=requestAnimationFrame(animatePipeline);
