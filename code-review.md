@@ -18,12 +18,11 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 49 | C-1 ~ C-5, M-1 ~ M-10, N-1 ~ N-20, N-22 ~ N-27, I-2(部分), I-3 ~ I-8, I-11(維持), I-12 |
-| ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
+| ✅ 已修補 / 已決策（含測試證據） | 50 | C-1 ~ C-5, M-1 ~ M-10, N-1 ~ N-20, N-22 ~ N-27, I-2(部分), I-3 ~ I-8, I-11(維持), I-12, M-3(接受風險) |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
 | ⏭ Out of Scope（spec 明列另案） | 2 | I-1（CSP/前端重構）、I-13（時間基準完整統一） |
 
-**下一步**：修補批次 D1~D21 全部完成（14 個 commit，全數 TDD red→green 附測試證據）。剩餘：M-3 認證待使用者拍板（spec D20 a/b/c/d）；I-1/I-13 為 spec 明列另案。運行中 server 已重啟載入修補（實測：traversal 404、simulate 400）。
+**下一步**：修補批次 D1~D21 全部完成（15 個 commit，全數 TDD red→green 附測試證據）；M-3 認證已決策「接受風險」（spec D20 選項 d，文件化於 README Security Notes）；僅餘 I-1/I-13 為 spec 明列另案。運行中 server 已重啟載入修補（實測：traversal 404、simulate 400）。
 
 ---
 
@@ -92,7 +91,7 @@
 **修復**：統一 UTC 基準
 
 ### M-3. 無認證 + 0.0.0.0 + CORS * + 可寫策略檔 → LAN 遠端程式碼執行
-**修補狀態**：⏸ **Decision Pending**（spec D20，待使用者拍板 a/b/c/d）— 2026-08-09 實測：`Access-Control-Allow-Origin: *` 仍在（HTTP header 確認）、監聽 `0.0.0.0:8899`、simulate 無認證可寫入；未做任何變更
+**修補狀態**：✅ **決策：接受風險**（2026-08-09 使用者拍板 spec D20 選項 d）— 不做認證/CORS 變更；風險接受理由與殘留風險已文件化於 README「Security Notes」（單人紙交易、無真實資金、暴露面已由 D1/D18/M-5 收窄；公網部署需重新評估）
 
 **檔案**：`quant_fleet_server.py` 第 1164 行
 **問題**：所有端點無認證、綁 0.0.0.0、`Access-Control-Allow-Origin: *`；`/api/strategy/save` 可寫任意 .js（每 poll 被 node eval 執行）；`/api/reset` 可清空帳戶、`/api/trade/simulate` 可偽造交易（子代理實測 TESTFAKE 開倉成功）

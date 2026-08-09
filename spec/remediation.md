@@ -137,9 +137,11 @@
 - 加 .catch：失敗以英文啟動 + 排程重試
 - 驗證：阻斷 i18n 路由 → 頁面仍啟動（英文）
 
-### D20. M-3 無認證（Decision Pending）
-- 待使用者決策：a) token 認證 / b) 只保護寫入端點 / c) 只移除 CORS * / d) 接受風險
-- 在此之前不做任何變更；spec 完成後由使用者拍板
+### D20. M-3 無認證（決策：接受風險 — 2026-08-09 使用者拍板）
+- 使用者決策：**d) 接受風險** — 不做認證/CORS 變更
+- 風險接受理由：單人使用的本地紙交易儀表板；交易為模擬（無真實資金）；網路暴露面已由 D1（路徑穿越）、D18（XSS）、M-5（simulate 驗證）大幅收窄
+- 殘留風險（已文件化於 README「Security Notes」）：同網段可讀取/寫入 API、無認證、CORS `*`
+- 若日後部署至公網或多人使用，需重新評估（a/b/c）
 
 ### D21. Minor 批次
 - N-3~N-27 逐項（見 code-review.md）：空倉曝險限制（N-10 文件標註）、positions round 一致（N-11）、_sma4h 標籤（N-12）、strategy_matrix active（N-13）、NAME regex 單引號（N-14）、WS 獨立重連+退避（N-16）、熱評估標示（N-17）、updateRailPrices data-price（N-18）、loadAccount catch（N-19）、硬編碼英文 i18n（N-20）、OBI 牆鐘 cooldown（N-21）、_run_strategy.js 檔名驗證（N-22）、state mtime 版本（N-23）、grid 死狀態 g.last（N-24）、backtest ticker 語義差異文件化（N-25）、README 更新（N-27）
@@ -155,7 +157,7 @@
 ## Out of Scope
 
 - **C-3 策略檔恢復**（設計決定：不預設策略）
-- **M-3 認證**（Decision Pending，使用者另行拍板）
+- **M-3 認證**（D20：**接受風險** — 使用者拍板選項 d，2026-08-09；風險已文件化）
 - **全系統時間戳統一**（I-13 完整版：影響前端顯示時區，另案決策）
 - 大架構改動：WebSocket 驅動 server、真實保證金/槓桿、歷史 tick 資料、策略 sandbox（vm 模組）
 - 前端重構（框架化、CSP、Tailwind 本地打包）

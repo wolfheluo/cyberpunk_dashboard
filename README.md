@@ -214,6 +214,19 @@ trading, with these documented differences:
 
 ---
 
+## Security Notes
+
+**Risk acceptance (decision 2026-08-09, spec/remediation.md D20 option d):**
+this is a single-user **paper-trading** dashboard. The HTTP API has **no
+authentication**, binds `0.0.0.0`, and answers with `Access-Control-Allow-Origin:
+*` — anyone on the same network segment can read/write the API (account reset,
+simulate trades, strategy files). This risk was reviewed and **accepted**:
+- trades are simulated (no real funds); the account is resettable
+- the exposure surface is narrowed by earlier fixes: path traversal blocked
+  (D1), stored XSS closed (D18), simulate input validated (M-5)
+- **Do not** deploy on a public network or share it with other users without
+  re-evaluating (auth token / write-endpoint protection / removing CORS `*`).
+
 ## Backtesting
 
 Historical daily klines are downloaded from [Binance Vision](https://data.binance.vision)
