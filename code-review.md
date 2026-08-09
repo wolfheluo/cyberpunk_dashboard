@@ -10,10 +10,10 @@
 
 | 嚴重度 | 數量 | 重點 |
 |--------|------|------|
-| 🔴 Critical | 2 | `/api/reset` 404、`/api/trade/simulate` 誤觸發帳戶清空 |
-| 🟠 Major | 7 | 估值 key 錯配、vol_surge 恆真、價格延遲、回測 lookahead、XSS 邊緣、HEAD 目錄洩漏、POST 壞 JSON 500 |
-| 🟡 Minor | 12 | 見下方清單 |
-| 🔵 Info | 8 | 文件/架構/測試現況 |
+| 🔴 Critical | 2 | **已修復（T-01, commit `127d4ab`）** |
+| 🟠 Major | 7 | **已修復（T-02~T-08, commits `8493eeb`~`5abe4ec`）** |
+| 🟡 Minor | 14 | 未處理（下一輪） |
+| 🔵 Info | 8 | 未處理（下一輪） |
 
 **驗證環境**：本機 `QF_DB_PATH=/tmp/qf_test.db QF_PORT=8901` 啟動真實 server，以 curl + sqlite 讀回驗證；`py_compile`、`node --check` 全數通過；en/zh i18n 149 keys 完全對齊。
 
@@ -24,6 +24,8 @@
 ## 🔴 Critical
 
 ### C-1. `/api/reset` endpoint 消失 — 前端 RESET 按鈕完全失效
+
+**修補狀態**：✅ 已修復（T-01, commit `127d4ab`）— 恢復 `elif self.path=="/api/reset":` 分支；實測 `POST /api/reset` → 200 + 帳戶清空；前端 `resetAccount()` 補 `.catch`（N-8）
 
 **檔案**：`quant_fleet_server.py` L1162-1171（reset 邏輯被併入 simulate 分支）、`dashboard/js/app.js` L780（呼叫端）
 
@@ -56,6 +58,8 @@ elif self.path == "/api/reset":
 
 ### C-2. `/api/trade/simulate` 執行交易後立刻清空整個帳戶 + 單一請求送出兩次 HTTP response
 
+**修補狀態**：✅ 已修復（T-01, commit `127d4ab`）— reset 區塊移出 simulate 分支；raw socket 實測單一請求僅 1 份 `HTTP/1.0` response，simulate 後 trades 保留 1 筆
+
 **檔案**：`quant_fleet_server.py` L1161-1171
 
 **問題**：C-1 的誤併入導致 simulate 分支變成「先執行模擬交易，接著無條件 DELETE 全部 trades/positions/signals、重置 cash、清 exec_log、清 active_strategy」。此外 L1162 `self._json(200, ...)` 送出第一次 response 後，L1171 又呼叫一次 `self._json(200, {"status":"reset"...})` — 同一請求寫入兩份 HTTP response（協議污染，client 可能收到 garbage 或連線異常）。
@@ -79,6 +83,8 @@ POST /api/trade/simulate {"symbol":"BTCUSDT","side":"BUY","price":100}
 
 ### M-1. `_position_value_now()` 用錯誤的 price_map key — 帳戶估值永遠 fallback 到 entry price
 
+**修補狀態**：✅ 已修復（T-02, commit `8493eeb`）— `price_map.get(r[0] + "USDT")`；實測 240.0（原 200.0）；Binance down fallback 保留
+
 **檔案**：`quant_fleet_server.py` L665-676
 
 **問題**：`price_map` 的 key 是完整 symbol（`t["symbol"]` = `"BTCUSDT"`），但 `positions.symbol` 存的是去掉 USDT 的 `"BTC"`（`execute_trade` 收到的 `sym`）。`price_map.get(r[0])` 永遠 miss → 永遠用 `entry_price` 估值。對比 `fetch_all_data` L708 的 re-mark 正確使用 `r[0] + "USDT"`——此處漏了後綴。
@@ -92,6 +98,8 @@ POST /api/trade/simulate {"symbol":"BTCUSDT","side":"BUY","price":100}
 ---
 
 ### M-2. `vol_surge` 單位錯配 — 幾乎永遠為 True，VOLUME factor 恆為 1.0
+
+**修補狀態**：✅ 已修復（T-04, commit `d0e0285`）— 改為「最後 1h kline 量 > 前 10 根平均 × 1.5」，`len>=3` guard；測試：spike True / flat False / 資料不足 False
 
 **檔案**：`quant_fleet_server.py` L764
 
@@ -115,6 +123,8 @@ if len(k) >= 3:
 
 ### M-3. Server 端策略執行價格延遲最多 60 秒（與設計文件矛盾）
 
+**修補狀態**：✅ 已修復（T-05, commit `7c23459`）— `fetch_all_data` 以 bookTicker mid（3s TTL）覆寫 price；book 缺失 fallback 24hr；無新增 Binance 呼叫；實測 100.0（book mid）vs 150.0（stale 24hr）
+
 **檔案**：`quant_fleet_server.py` L683-691、L748
 
 **問題**：`fetch_all_data` 的 `price_map` 完全來自 `fetch_ticker24_cached()`（TTL 60s）。`fetch_book_cached()`（TTL 3s）只被用來建 `book` 參數，**沒有**用來更新 `ticker.price`。因此策略評估與 `execute_trade` 執行的價格最多落後 60 秒，而前端 WS 顯示的是即時價。
@@ -129,6 +139,8 @@ if len(k) >= 3:
 ---
 
 ### M-4. 回測 `atr14` lookahead bias — 使用整個資料集的「最後 14 根」而非「到目前為止」
+
+**修補狀態**：✅ 已修復（T-03, commit `5ea3e5f`）— `calcATR(klines.slice(0, i + 1), 14)`；60 低波動+40 高波動 synthetic 資料實測：buy_count 0→≥1
 
 **檔案**：`strategies/_run_backtest.js` L103（與 L66-75 `calcATR`）
 
@@ -149,6 +161,8 @@ atr14: calcATR(klines.slice(0, i + 1), 14),
 
 ### M-5. 策略檔名未驗證即進入前端 inline onclick — 潛在 stored XSS（低利用性）
 
+**修補狀態**：✅ 已修復（T-06, commit `be5a049`）— `list_js_strategies` 套用 `[A-Za-z0-9_-]+\.js` 白名單；前端 3 個檔名內插點（openStrategy/deleteStrategy/option value）加 `esc()`；實測 `a".js` 不再列出、activate 400
+
 **檔案**：`quant_fleet_server.py` L98-114（`list_js_strategies`）、`dashboard/js/app.js` L76-78
 
 **問題**：`list_js_strategies()` 只過濾 `.js` 後綴與 `_` 前綴，**不**套用 `_safe_strategy_name()` 白名單。若 `strategies/` 目錄被放入含引號的檔名（如 `a".js`、`x'.js`——本機檔案系統可存在），前端 `onclick="openStrategy('...filename...')"` 與 `deleteStrategy` 會直接內插未轉義字串 → HTML attribute breakout → XSS。寫入路由（create/save/activate）已驗證檔名，唯獨「列出」路徑沒驗證。
@@ -162,6 +176,8 @@ atr14: calcATR(klines.slice(0, i + 1), 14),
 ---
 
 ### M-6. `do_HEAD` 未覆寫 — 洩漏專案根目錄列表
+
+**修補狀態**：✅ 已修復（T-07, commit `b9562c2`）— `do_HEAD` 委派 `do_GET`，所有 body 寫入加 `command != "HEAD"` guard；實測 HEAD / Content-Length 14409（= dashboard，原 794 listing）
 
 **檔案**：`quant_fleet_server.py` L1017-1129（`Handler` 覆寫 do_GET/do_POST/do_DELETE，唯獨未覆寫 do_HEAD）
 
@@ -181,6 +197,8 @@ HEAD /api/data   → HTTP 404（走檔案系統 translate_path，與 GET 行為�
 ---
 
 ### M-7. 所有 POST endpoint 對 malformed JSON 無防護 — 直接 500/連線錯誤
+
+**修補狀態**：✅ 已修復（T-08, commit `5abe4ec`）— 新增 `_read_json()` helper，6 個 POST handler 全部套用；實測 malformed/empty → 400 `{"error":"Invalid JSON"}`，合法請求不受影響
 
 **檔案**：`quant_fleet_server.py` L1133、1148、1173、1209、1263（`json.loads(self.rfile.read(...))`）
 
@@ -258,13 +276,13 @@ def _read_json(self):
 
 本次為 fresh audit（不參考先前 ledger）。最嚴重的是 **commit `360ffe2` 引入的回歸**：reset 分支頭被誤刪，一次弄壞 `/api/reset` 與 `/api/trade/simulate` 兩個功能，並在單一請求中寫入兩份 HTTP response。其餘 Major 集中在**價格資料流**（M-1 估值 key 錯配、M-2 vol_surge 單位、M-3 60s 價格延遲、M-4 回測 lookahead）——這些會讓「帳戶頁 vs dashboard」顯示不一致、策略指標失真、回測結果不可信，建議優先處理。
 
-| 嚴重度 | 數量 |
-|--------|------|
-| 🔴 Critical | 2 |
-| 🟠 Major | 7 |
-| 🟡 Minor | 14 |
-| 🔵 Info | 8 |
+| 嚴重度 | 數量 | 狀態 |
+|--------|------|------|
+| 🔴 Critical | 2 | ✅ 全部修復 |
+| 🟠 Major | 7 | ✅ 全部修復 |
+| 🟡 Minor | 14 | ⏳ 未處理 |
+| 🔵 Info | 8 | ⏳ 未處理 |
 
-修復順序建議：C-1/C-2（同一 diff 可一次修復）→ M-1/M-4（正確性）→ M-2/M-3（指標與價格流）→ 其餘。
+修復已完成（T-01~T-08, commits `127d4ab` → `5abe4ec`，25 tests 全綠 + live 冒煙測試通過）。
 
 *本文件為審計 ledger：每項修復後更新狀態（✅/⏳）並保留至使用者確認移除。*
