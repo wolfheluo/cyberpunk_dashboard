@@ -230,7 +230,7 @@ function drawBTCanvas(){
   var allEq=[],allDates=[];
   btData.forEach(function(b){allEq=allEq.concat(b.equity_curve||[]);allDates=allDates.concat(b.dates||[]);});
   if(!allEq.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText(I18n.t('no_equity_data'),w/2,h/2);ctx.textAlign='start';return;}
-  var eqMin=Math.min.apply(null,allEq),eqMax=Math.max.apply(null,allEq),eqRng=eqMax-eqMin||1;
+  var eqMin=allEq[0],eqMax=allEq[0];for(var _i=1;_i<allEq.length;_i++){if(allEq[_i]<eqMin)eqMin=allEq[_i];if(allEq[_i]>eqMax)eqMax=allEq[_i];}var eqRng=eqMax-eqMin||1;  // N-10: no apply() on huge arrays
   var pad=40;
 
   // Axes
@@ -474,8 +474,9 @@ function logLine(e){
 function renderExecLog(){
   var el=document.getElementById('execLog');el.innerHTML='';
   if(!DATA.exec_log.length){el.innerHTML='<div class="text-[#5A6275] py-px">'+I18n.t('awaiting_feed')+'</div>';return;}
+  var wasPinned=el.parentElement.scrollTop+el.parentElement.clientHeight>=el.parentElement.scrollHeight-4; // N-11
   for(var i=Math.max(0,DATA.exec_log.length-50);i<DATA.exec_log.length;i++){var e=DATA.exec_log[i],div=document.createElement('div');div.className='py-px';div.innerHTML=logLine(e);el.appendChild(div);}
-  el.parentElement.scrollTop=el.parentElement.scrollHeight;
+  if(wasPinned)el.parentElement.scrollTop=el.parentElement.scrollHeight; // only auto-scroll when already at bottom
 }
 
 // ============================================================
@@ -571,7 +572,7 @@ function evaluateJSStrategy(ticker){
   try{
     if(activeJSStrategy&&typeof activeJSStrategy.evaluate==='function'){
       return activeJSStrategy.evaluate({
-        id:ticker.id,name:ticker.name,price:price,volume:ticker.volume_m,change_pct:ticker.change_pct,
+        id:ticker.id,name:ticker.name,price:price,volume:ticker.volume_m*1e6,change_pct:ticker.change_pct,  // N-9: raw quoteVolume units
         high_24h:w.high||ticker.high_24h,low_24h:w.low||ticker.low_24h,
         pct_from_high:w.high?((price-w.high)/w.high*100):0,
         pct_from_low:w.low?((price-w.low)/w.low*100):0,
@@ -693,7 +694,7 @@ function drawAccountChart(equityCurve,initialCapital){
   var equity=[],dates=[];
   for(var i=0;i<equityCurve.length;i++){equity.push(equityCurve[i][1]);dates.push((equityCurve[i][0]||'').slice(11,16));}
 
-  var eqMin=Math.min.apply(null,equity.concat([initialCapital])),eqMax=Math.max.apply(null,equity.concat([initialCapital])),eqRng=eqMax-eqMin||1;
+  var _eqAll=equity.concat([initialCapital]),eqMin=_eqAll[0],eqMax=_eqAll[0];for(var _j=1;_j<_eqAll.length;_j++){if(_eqAll[_j]<eqMin)eqMin=_eqAll[_j];if(_eqAll[_j]>eqMax)eqMax=_eqAll[_j];}var eqRng=eqMax-eqMin||1;  // N-10
 
   // Axes
   // Grid lines (horizontal value grid + vertical time grid)
