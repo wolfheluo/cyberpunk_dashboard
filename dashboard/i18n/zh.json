@@ -125,5 +125,19 @@
   "edge_exec": "執行",
   "edge_settle": "結算",
   "editing_status": "編輯中: {fname}",
-  "select_strategy_placeholder": "選擇策略"
+  "select_strategy_placeholder": "選擇策略",
+  "log_decision": "{sym} {prev}→{signal} ({detail}，信心 {confidence})",
+  "log_filled": "{sym} {side} {qty} @${price} 已成交·{action} ${notional}",
+  "log_realized": "已實現 {rp}",
+  "log_action_open": "開倉",
+  "log_action_add": "加倉",
+  "log_action_close": "平倉",
+  "log_action_cover": "回補",
+  "log_rejected": "拒絕",
+  "log_failed": "失敗",
+  "log_reason_insufficient": "餘額不足",
+  "log_reason_db": "資料庫寫入錯誤",
+  "log_reason_unknown": "未知原因",
+  "log_conf": "信心 {c}",
+  "log_action_filled": "已成交"
 }

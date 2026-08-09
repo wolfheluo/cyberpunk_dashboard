@@ -419,10 +419,38 @@ function renderRecentTrades(){
   if(!DATA.trades||!DATA.trades.length){el.innerHTML='<div class="text-[#5A6275]">'+I18n.t('no_trades')+'</div>';return;}
   for(var i=0;i<Math.min(DATA.trades.length,20);i++){var t=DATA.trades[i],sc=t.side==='BUY'?'text-[#00FF66]':'text-[#FF2A6D]';el.innerHTML+='<div class="flex gap-3 border-b border-[#1E222D30] py-0.5"><span class="text-[#5A6275] w-16">'+(t.created_at||'').slice(11,19)+'</span><span class="text-[#00E5FF] w-14">'+t.symbol+'</span><span class="'+sc+' w-8">'+t.side+'</span><span class="text-[#5A6275]">$'+Number(t.price).toFixed(t.price<1?4:2)+' x'+t.quantity+'</span></div>';}
 }
+function logReasonKey(r){return r==='insufficient_funds'?'insufficient':r==='db_error'?'db':(r||'unknown');}
+function logLine(e){
+  // Structured events (kind: decision/filled/rejected/failed) are translated
+  // client-side so the language switch applies instantly. Legacy html entries
+  // (if any) fall back to raw html.
+  if(!e.kind)return e.html||'';
+  var t=e.ts,sc=e.signal||e.side||'';
+  var scColor=sc==='BUY'?'#00FF66':sc==='SELL'?'#FF2A6D':'#5A6275';
+  var pre='<span class="text-[#5A6275]">['+t+']</span> <span class="text-[#00E5FF]">'+esc(e.sym)+'</span>';
+  if(e.kind==='decision'){
+    var dCol=e.signal==='BUY'?'#00FF66':e.signal==='SELL'?'#FF2A6D':'#5A6275';
+    return pre+' '+esc(e.prev)+'→<span style="color:'+dCol+'">'+esc(e.signal)+'</span> <span class="text-[#5A6275]">('+esc(e.detail)+', '+I18n.t('log_conf',{c:e.confidence})+')</span>';
+  }
+  if(e.kind==='filled'){
+    var line=pre+' '+sc+' '+Number(e.qty).toFixed(4)+' @$'+Number(e.price).toFixed(2)+' <span style="color:#00FF66">'+I18n.t('log_action_filled')+'·'+I18n.t('log_action_'+e.action)+'</span> $'+Number(e.notional).toLocaleString();
+    if(e.realized)line+=' <span style="color:#00FF66">'+I18n.t('log_realized',{rp:(e.realized>0?'+':'')+e.realized.toFixed(2)})+'</span>';
+    return line;
+  }
+  if(e.kind==='rejected'){
+    var r=I18n.t('log_reason_'+logReasonKey(e.reason));
+    return pre+' '+sc+' <span style="color:#FFCC00">'+I18n.t('log_rejected')+'</span> — '+r;
+  }
+  if(e.kind==='failed'){
+    var r2=I18n.t('log_reason_'+logReasonKey(e.reason));
+    return pre+' '+sc+' <span style="color:#FF2A6D">'+I18n.t('log_failed')+'</span> — '+r2;
+  }
+  return e.html||'';
+}
 function renderExecLog(){
   var el=document.getElementById('execLog');el.innerHTML='';
   if(!DATA.exec_log.length){el.innerHTML='<div class="text-[#5A6275] py-px">'+I18n.t('awaiting_feed')+'</div>';return;}
-  for(var i=Math.max(0,DATA.exec_log.length-50);i<DATA.exec_log.length;i++){var e=DATA.exec_log[i],div=document.createElement('div');div.className='py-px';div.innerHTML=e.html||'';el.appendChild(div);}
+  for(var i=Math.max(0,DATA.exec_log.length-50);i<DATA.exec_log.length;i++){var e=DATA.exec_log[i],div=document.createElement('div');div.className='py-px';div.innerHTML=logLine(e);el.appendChild(div);}
   el.parentElement.scrollTop=el.parentElement.scrollHeight;
 }
 

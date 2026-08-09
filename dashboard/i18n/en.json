@@ -125,5 +125,19 @@
   "edge_exec": "exec",
   "edge_settle": "settle",
   "editing_status": "Editing: {fname}",
-  "select_strategy_placeholder": "Select a strategy"
+  "select_strategy_placeholder": "Select a strategy",
+  "log_decision": "{sym} {prev}→{signal} ({detail}, conf {confidence})",
+  "log_filled": "{sym} {side} {qty} @${price} FILLED·{action} ${notional}",
+  "log_realized": "realized {rp}",
+  "log_action_open": "OPEN",
+  "log_action_add": "ADD-ON",
+  "log_action_close": "CLOSE",
+  "log_action_cover": "COVER",
+  "log_rejected": "REJECTED",
+  "log_failed": "FAILED",
+  "log_reason_insufficient": "insufficient funds",
+  "log_reason_db": "database write error",
+  "log_reason_unknown": "unknown",
+  "log_conf": "conf {c}",
+  "log_action_filled": "FILLED"
 }

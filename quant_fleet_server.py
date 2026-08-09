@@ -603,10 +603,10 @@ def fetch_all_data():
             detail = f"RSI {rsi}" if rsi is not None else "—"
             if obi is not None:
                 detail += f", OBI {obi}"
-            sig_color = "#00FF66" if signal == "BUY" else "#FF2A6D" if signal == "SELL" else "#5A6275"
             result["exec_log"].append({
-                "ts": scan_ts, "type": "info",
-                "html": f'[{scan_ts}] {_esc(sym)} {_esc(prev_sig)}→{_esc(signal)} <span style="color:{sig_color}">({detail}, 信心 {confidence})</span>'
+                "ts": scan_ts, "kind": "decision",
+                "sym": sym, "prev": prev_sig, "signal": signal,
+                "confidence": confidence, "detail": detail
             })
 
         # Auto-execute trade on BUY/SELL — events drive the pipeline orb:
@@ -640,31 +640,34 @@ def fetch_all_data():
                 result["executed"].append(event)
                 if current_pos:
                     if current_pos["side"] == signal:
-                        action = "加倉"
+                        action = "add"
                     elif signal == "BUY":
-                        action = "回補"
+                        action = "cover"
                     else:
-                        action = "平倉"
+                        action = "close"
                 else:
-                    action = "開倉"
+                    action = "open"
                 rp = trade_result.get("realized_pnl") or 0
-                rp_html = f' <span style="color:#00FF66">已實現 {rp:+.2f}</span>' if rp else ''
                 result["exec_log"].append({
-                    "ts": scan_ts, "type": "info",
-                    "html": f'[{scan_ts}] {_esc(sym)} {signal} {trade_result.get("quantity", 0):.4f} @${price:.2f} <span style="color:#00FF66">已成交·{action}</span> ${trade_result.get("notional", 0):,.2f}{rp_html}'
+                    "ts": scan_ts, "kind": "filled",
+                    "sym": sym, "side": signal,
+                    "qty": trade_result.get("quantity", 0),
+                    "price": price, "notional": trade_result.get("notional", 0),
+                    "realized": rp, "action": action
                 })
             elif st == "rejected":
                 result["rejected"].append(event)
-                reason = "餘額不足" if trade_result.get("reason") == "insufficient_funds" else (trade_result.get("reason") or "未知原因")
                 result["exec_log"].append({
-                    "ts": scan_ts, "type": "info",
-                    "html": f'[{scan_ts}] {_esc(sym)} {signal} <span style="color:#FFCC00">拒絕</span> — {reason}'
+                    "ts": scan_ts, "kind": "rejected",
+                    "sym": sym, "side": signal,
+                    "reason": trade_result.get("reason") or "unknown"
                 })
             elif st == "failed":
                 result["failed"].append(event)
                 result["exec_log"].append({
-                    "ts": scan_ts, "type": "info",
-                    "html": f'[{scan_ts}] {_esc(sym)} {signal} <span style="color:#FF2A6D">失敗</span> — 資料庫寫入錯誤'
+                    "ts": scan_ts, "kind": "failed",
+                    "sym": sym, "side": signal,
+                    "reason": "db_error"
                 })
 
         sparkline = closes_1h[-18:] if len(closes_1h) >= 18 else closes_1h
