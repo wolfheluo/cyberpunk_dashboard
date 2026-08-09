@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 8 | C-1, C-2, C-4, M-5, M-6, M-7, N-15, N-26 |
-| ⏳ 未修補（spec 已規劃未執行） | 41 | C-5, M-1, M-2, M-4, M-8 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 9 | C-1, C-2, C-4, C-5, M-5, M-6, M-7, N-15, N-26 |
+| ⏳ 未修補（spec 已規劃未執行） | 40 | M-1, M-2, M-4, M-8 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -66,7 +66,7 @@
 **修復**：`int(row[0]) // 1000`
 
 ### C-5. backtest 未平倉空頭清算符號錯誤
-**修補狀態**：⏳ **未修補** — strategies/_run_backtest.js line 167 仍 `cash += position.qty * close`（無 side 分向）；spec D5 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D5）— tests/test_backtest.js 4/4 綠（node seam）：always-SELL 合成行情（$100 開空 5 股、$110 結算）final_equity = 9950（手算值；bug 版 11050 高估 2×notional）；多頭對照組 10050 仍正確；結算改依 side 分向 `cash += side==='SELL' ? -qty*close : qty*close`
 
 **檔案**：`strategies/_run_backtest.js` 第 167 行
 **問題**：`if (position && klines.length) cash += position.qty * close` — 空頭開倉時 cash 已 `+notional`，平倉應 `cash -= qty*close`；且與 line 164 的 MTM（SELL 負號）不一致

@@ -164,7 +164,13 @@ function backtestOne(strategy, symbol, klines) {
     equityCurve.push(cash + (position ? position.qty * price * (position.side === 'SELL' ? -1 : 1) : 0));
   }
 
-  if (position && klines.length) cash += position.qty * klines[klines.length - 1].close;
+  if (position && klines.length) {
+    // Final settlement by side (D5/C-5): a short must be bought back
+    // (cash -= qty*close); a long is sold (cash += qty*close). The old
+    // unconditional `cash += qty*close` overstated shorts by 2x notional.
+    const last = klines[klines.length - 1].close;
+    cash += position.side === 'SELL' ? -position.qty * last : position.qty * last;
+  }
   const finalEquity = cash;
   const totalReturn = (finalEquity - INITIAL_CAPITAL) / INITIAL_CAPITAL * 100;
 
