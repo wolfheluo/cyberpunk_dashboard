@@ -630,12 +630,21 @@ function loadAccount(){
         '</tbody></table>';
     }
 
-    // Trades
+    // Position cycles (open → close lifecycle, aggregated)
     var trEl=document.getElementById('accountTrades');
-    if(!trades.trades||!trades.trades.length){trEl.innerHTML='<div class="text-[#5A6275]">No trades yet</div>';}
+    if(!pf.cycles||!pf.cycles.length){trEl.innerHTML='<div class="text-[#5A6275]">'+I18n.t('no_trades')+'</div>';}
     else{
-      trEl.innerHTML='<table class="bt-table w-full"><thead><tr><th>'+I18n.t('col_time')+'</th><th>'+I18n.t('col_symbol')+'</th><th>'+I18n.t('col_side')+'</th><th>'+I18n.t('col_price')+'</th><th>'+I18n.t('col_qty')+'</th><th>'+I18n.t('col_notional')+'</th><th>'+I18n.t('col_strategy')+'</th></tr></thead><tbody>'+
-        trades.trades.map(function(t){var sc=t.side==='BUY'?'text-[#00FF66]':'text-[#FF2A6D]';return '<tr><td class="text-[#5A6275]">'+(t.created_at||'').slice(11,19)+'</td><td class="text-[#00E5FF]">'+t.symbol+'</td><td class="'+sc+'">'+t.side+'</td><td>$'+Number(t.price).toFixed(Number(t.price)<1?4:2)+'</td><td>'+Number(t.quantity).toFixed(4)+'</td><td>$'+Number(t.notional).toFixed(0)+'</td><td class="text-[#5A6275]">'+(t.strategy||'')+'</td></tr>';}).join('')+
+      trEl.innerHTML='<table class="bt-table w-full"><thead><tr><th>'+I18n.t('col_time')+'</th><th>'+I18n.t('col_symbol')+'</th><th>'+I18n.t('col_side')+'</th><th>'+I18n.t('col_open_avg')+'</th><th>'+I18n.t('col_close_avg')+'</th><th>'+I18n.t('col_qty')+'</th><th>'+I18n.t('col_unrealized')+'</th><th>'+I18n.t('col_realized')+'</th><th>'+I18n.t('col_strategy')+'</th></tr></thead><tbody>'+
+        pf.cycles.map(function(c){
+          var sc=c.side==='BUY'?'text-[#00FF66]':'text-[#FF2A6D]';
+          var sideTxt=I18n.t(c.side==='BUY'?'signal_buy':'signal_sell');
+          var uCl=c.unrealized>=0?'text-[#00FF66]':'text-[#FF2A6D]',uSg=c.unrealized>=0?'+':'';
+          var rCl=c.realized>=0?'text-[#00FF66]':'text-[#FF2A6D]',rSg=c.realized>=0?'+':'';
+          var openTxt='$'+Number(c.open_avg).toFixed(Number(c.open_avg)<1?4:2);
+          var closeTxt=c.close_avg!=null?'$'+Number(c.close_avg).toFixed(Number(c.close_avg)<1?4:2):'\u2014';
+          var uTxt=c.closed?'\u2014':uSg+'$'+Math.abs(c.unrealized).toFixed(2);
+          return '<tr><td class="text-[#5A6275]">'+(c.open_time||'').slice(11,16)+'</td><td class="text-[#00E5FF]">'+c.symbol+'</td><td class="'+sc+'">'+sideTxt+'</td><td>'+openTxt+'</td><td>'+closeTxt+'</td><td>'+Number(c.quantity).toFixed(4)+'</td><td class="'+uCl+'">'+uTxt+'</td><td class="'+rCl+'">'+rSg+'$'+c.realized.toFixed(2)+'</td><td class="text-[#5A6275]">'+(c.strategy||'')+'</td></tr>';
+        }).join('')+
         '</tbody></table>';
     }
 

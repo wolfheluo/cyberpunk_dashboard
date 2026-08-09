@@ -358,6 +358,85 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                 pass
             return {"status": "failed", "reason": "db_error"}
 
+def rebuild_cycles():
+    """Rebuild position lifecycles from trade history (average-cost).
+
+    Each row = one position cycle: open time, symbol, side, average open
+    price (across ALL opens/adds), average close price (across all partial
+    closes), total opened quantity, unrealized (open cycles only, marked at
+    the last re-marked price), realized PnL, strategy.
+    """
+    rows = db_conn.execute(
+        "SELECT symbol,side,price,quantity,strategy,created_at FROM trades ORDER BY id ASC").fetchall()
+    symbols = []
+    for r in rows:
+        if r[0] not in symbols:
+            symbols.append(r[0])
+
+    cur_price = {}
+    for r in db_conn.execute("SELECT symbol,current_price FROM positions").fetchall():
+        if r[1]:
+            cur_price[r[0]] = r[1]
+
+    cycles = []
+    for sym in symbols:
+        pos = None
+        for side, price, qty, strategy, ts in [r[1:] for r in rows if r[0] == sym]:
+            if pos is None:
+                pos = {"symbol": sym, "open_time": ts, "side": side, "open_qty_total": 0.0, "open_cost_total": 0.0,
+                       "remaining": 0.0, "remaining_cost": 0.0,
+                       "close_qty": 0.0, "close_value": 0.0, "realized": 0.0, "strategy": strategy}
+                cycles.append(pos)
+            if side == pos["side"]:
+                # open or add
+                pos["open_qty_total"] += qty
+                pos["open_cost_total"] += qty * price
+                pos["remaining"] += qty
+                pos["remaining_cost"] += qty * price
+            else:
+                # close / cover (partial or full)
+                avg_entry = pos["remaining_cost"] / pos["remaining"] if pos["remaining"] else price
+                close_qty = min(qty, pos["remaining"])
+                if pos["side"] == "BUY":
+                    realized = (price - avg_entry) * close_qty
+                else:
+                    realized = (avg_entry - price) * close_qty
+                pos["realized"] += realized
+                pos["close_qty"] += close_qty
+                pos["close_value"] += close_qty * price
+                pos["remaining"] -= close_qty
+                pos["remaining_cost"] -= close_qty * avg_entry
+                if pos["remaining"] <= 0.00001:
+                    pos = None
+
+    out = []
+    for p in cycles:
+        open_avg = p["open_cost_total"] / p["open_qty_total"] if p["open_qty_total"] else 0
+        close_avg = p["close_value"] / p["close_qty"] if p["close_qty"] else None
+        cur = cur_price.get(sym)
+        if p["remaining"] > 0.00001 and cur:
+            if p["side"] == "BUY":
+                unrealized = (cur - open_avg) * p["remaining"]
+            else:
+                unrealized = (open_avg - cur) * p["remaining"]
+        else:
+            unrealized = 0.0
+        out.append({
+            "open_time": p["open_time"],
+            "symbol": p["symbol"],
+            "side": p["side"],
+            "open_avg": round(open_avg, 6),
+            "close_avg": round(close_avg, 6) if close_avg is not None else None,
+            "quantity": round(p["open_qty_total"], 8),
+            "unrealized": round(unrealized, 2),
+            "realized": round(p["realized"], 2),
+            "strategy": p["strategy"],
+            "closed": p["remaining"] <= 0.00001
+        })
+    out.reverse()  # newest first
+    return out
+
+
 def portfolio_stats(initial_capital=INITIAL_CAPITAL):
     """Average-cost based realized PnL + equity curve from trade history.
     Supports long AND short positions (SELL opens short, BUY covers).
@@ -791,7 +870,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             pf = db_conn.execute("SELECT cash,initial_capital FROM portfolio WHERE id=1").fetchone()
             pos_val = sum(r[3]*(r[0] if r[0] else r[1]) * (1 if r[2] == "BUY" else -1)
                            for r in db_conn.execute("SELECT current_price,entry_price,side,quantity FROM positions").fetchall())
-            self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,"total_equity":pf[0]+pos_val})
+            self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,
+                            "total_equity":pf[0]+pos_val, "cycles": rebuild_cycles()})
         elif self.path == "/api/symbols":
             rows = db_conn.execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()
             self._json(200, {"symbols":[{"id":r[0],"symbol":r[1],"name":r[2]} for r in rows]})

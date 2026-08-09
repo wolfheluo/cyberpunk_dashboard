@@ -140,5 +140,9 @@
   "log_reason_unknown": "unknown",
   "log_conf": "conf {c}",
   "log_action_filled": "FILLED",
-  "btn_rerun": "↺ RE-RUN"
+  "btn_rerun": "↺ RE-RUN",
+  "col_open_avg": "Avg Open",
+  "col_close_avg": "Avg Close",
+  "col_unrealized": "Unrealized",
+  "col_realized": "Realized"
 }

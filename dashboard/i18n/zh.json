@@ -140,5 +140,9 @@
   "log_reason_unknown": "未知原因",
   "log_conf": "信心 {c}",
   "log_action_filled": "已成交",
-  "btn_rerun": "↺ 重新回測"
+  "btn_rerun": "↺ 重新回測",
+  "col_open_avg": "平均開倉價",
+  "col_close_avg": "平均平倉價",
+  "col_unrealized": "未實現損益",
+  "col_realized": "已實現損益"
 }
