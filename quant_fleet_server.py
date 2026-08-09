@@ -358,6 +358,60 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                 pass
             return {"status": "failed", "reason": "db_error"}
 
+def equity_curve():
+    """Full-history equity curve (average-cost MTM), correct starting point
+    ($10,000) regardless of how many trades exist — unlike the frontend which
+    rebuilt from the last 200 trades and drifted.
+    Returns [[ts, equity], ...] from initial capital to now (incl. open MTM).
+    """
+    rows = db_conn.execute(
+        "SELECT symbol,side,price,quantity,created_at FROM trades ORDER BY id ASC").fetchall()
+    cash = float(INITIAL_CAPITAL)
+    pos = {}  # sym -> {"side","qty","entry"}
+    last_price = {}
+    curve = [[rows[0][4] if rows else "", cash]]
+    for sym, side, price, qty, ts in rows:
+        last_price[sym] = price
+        p = pos.get(sym)
+        if side == "BUY":
+            cash -= qty * price
+            if p and p["side"] == "SELL":
+                realized = (p["entry"] - price) * qty
+                remain = p["qty"] - qty
+                if remain > 0.00001:
+                    pos[sym] = {"side": "SELL", "qty": remain, "entry": p["entry"]}
+                elif remain < -0.00001:
+                    pos[sym] = {"side": "BUY", "qty": -remain, "entry": price}
+                else:
+                    del pos[sym]
+            elif p:
+                new_qty = p["qty"] + qty
+                pos[sym] = {"side": "BUY", "qty": new_qty,
+                            "entry": (p["entry"] * p["qty"] + price * qty) / new_qty}
+            else:
+                pos[sym] = {"side": "BUY", "qty": qty, "entry": price}
+        else:
+            cash += qty * price
+            if p and p["side"] == "BUY":
+                remain = p["qty"] - qty
+                if remain > 0.00001:
+                    pos[sym] = {"side": "BUY", "qty": remain, "entry": p["entry"]}
+                elif remain < -0.00001:
+                    pos[sym] = {"side": "SELL", "qty": -remain, "entry": price}
+                else:
+                    del pos[sym]
+            elif p:
+                new_qty = p["qty"] + qty
+                pos[sym] = {"side": "SELL", "qty": new_qty,
+                            "entry": (p["entry"] * p["qty"] + price * qty) / new_qty}
+            else:
+                pos[sym] = {"side": "SELL", "qty": qty, "entry": price}
+        mtm = sum(v["qty"] * last_price.get(s, price) * (1 if v["side"] == "BUY" else -1)
+                  for s, v in pos.items())
+        curve.append([ts, round(cash + mtm, 2)])
+    return curve
+
+
 def rebuild_cycles():
     """Rebuild position lifecycles from trade history (average-cost).
 
@@ -871,7 +925,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             pos_val = sum(r[3]*(r[0] if r[0] else r[1]) * (1 if r[2] == "BUY" else -1)
                            for r in db_conn.execute("SELECT current_price,entry_price,side,quantity FROM positions").fetchall())
             self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,
-                            "total_equity":pf[0]+pos_val, "cycles": rebuild_cycles()})
+                            "total_equity":pf[0]+pos_val, "cycles": rebuild_cycles(),
+                            "equity_curve": equity_curve()})
         elif self.path == "/api/symbols":
             rows = db_conn.execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()
             self._json(200, {"symbols":[{"id":r[0],"symbol":r[1],"name":r[2]} for r in rows]})

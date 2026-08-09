@@ -664,37 +664,20 @@ function loadAccount(){
     }
 
     // Equity curve from trades
-    drawAccountChart(trades.trades||[],initCap);
+    drawAccountChart(pf.equity_curve||[],initCap);
   });
 }
 
-function drawAccountChart(trades,initialCapital){
+function drawAccountChart(equityCurve,initialCapital){
   var c=document.getElementById('accountChart'),p=c.parentElement;
   c.width=p.clientWidth-8;c.height=p.clientHeight-8;
   var ctx=c.getContext('2d'),w=c.width,h=c.height,pad=40;
   ctx.clearRect(0,0,w,h);
-  if(!trades.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText(I18n.t('no_trades'),w/2,h/2);ctx.textAlign='start';return;}
+  if(!equityCurve||!equityCurve.length){ctx.fillStyle='#5A6275';ctx.font='12px monospace';ctx.textAlign='center';ctx.fillText(I18n.t('no_trades'),w/2,h/2);ctx.textAlign='start';return;}
 
-  // Build equity curve from trade history (cash + position MTM)
-  var cash=initialCapital,positions={},equity=[],dates=[],lastPrice={};
-  for(var i=trades.length-1;i>=0;i--){
-    var t=trades[i];
-    lastPrice[t.symbol]=t.price;
-    if(t.side==='BUY'){
-      cash-=t.notional;
-      if(positions[t.symbol]){positions[t.symbol]+=t.quantity;}
-      else{positions[t.symbol]=t.quantity;}
-    }else{
-      cash+=t.notional;
-      if(positions[t.symbol]){positions[t.symbol]-=t.quantity;if(positions[t.symbol]<=0)delete positions[t.symbol];}
-    }
-    // MTM: mark remaining positions to last known price
-    var mtm=0;
-    for(var sym in positions){mtm+=positions[sym]*(lastPrice[sym]||t.price);}
-    equity.push(cash+mtm);
-    dates.push((t.created_at||'').slice(11,19));
-  }
-  equity.reverse();dates.reverse();
+  // Equity curve from the server (full history, correct $10k start)
+  var equity=[],dates=[];
+  for(var i=0;i<equityCurve.length;i++){equity.push(equityCurve[i][1]);dates.push((equityCurve[i][0]||'').slice(11,16));}
 
   var eqMin=Math.min.apply(null,equity.concat([initialCapital])),eqMax=Math.max.apply(null,equity.concat([initialCapital])),eqRng=eqMax-eqMin||1;
 
