@@ -9,6 +9,7 @@ import http.client
 import json
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -93,6 +94,82 @@ class HarnessSmokeTests(unittest.TestCase):
         data = json.loads(body)
         self.assertEqual(data["active"], "")
         self.assertEqual([s["filename"] for s in data["strategies"]], ["grid.js"])
+
+
+class ResetAndSimulateTests(unittest.TestCase):
+    """T-01 (C-1/C-2): /api/reset works; simulate executes ONE trade and does
+    NOT wipe the account (regression from commit 360ffe2, where the reset
+    branch header was deleted and its body merged into the simulate branch)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.stop()
+
+    def setUp(self):
+        # clean account state directly (pre-fix /api/reset is broken, so the
+        # test cannot rely on it for setup)
+        conn = sqlite3.connect(self.srv.db)
+        conn.execute("DELETE FROM trades")
+        conn.execute("DELETE FROM positions")
+        conn.execute("DELETE FROM signals")
+        conn.execute("UPDATE portfolio SET cash=10000 WHERE id=1")
+        conn.commit()
+        conn.close()
+
+    def _simulate(self, side="BUY", price=100):
+        body = json.dumps({"symbol": "BTCUSDT", "side": side, "price": price}).encode()
+        return self.srv.request("POST", "/api/trade/simulate", body)
+
+    def test_reset_returns_200_and_clears_account(self):
+        self._simulate()
+        status, body = self.srv.request("POST", "/api/reset")
+        self.assertEqual(status, 200)
+        d = json.loads(body)
+        self.assertEqual(d["status"], "reset")
+        self.assertEqual(d["capital"], 10000)
+        self.assertEqual(d["active_strategy"], "")
+        _, pos = self.srv.request("GET", "/api/positions")
+        self.assertEqual(json.loads(pos)["positions"], [])
+        _, trades = self.srv.request("GET", "/api/trades")
+        self.assertEqual(json.loads(trades)["trades"], [])
+        _, pf = self.srv.request("GET", "/api/portfolio")
+        self.assertEqual(json.loads(pf)["cash"], 10000)
+
+    def test_simulate_keeps_the_trade(self):
+        # the 360ffe2 bug wiped trades/positions right after filling
+        status, body = self._simulate()
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["status"], "filled")
+        _, trades = self.srv.request("GET", "/api/trades")
+        self.assertEqual(len(json.loads(trades)["trades"]), 1)
+        _, pos = self.srv.request("GET", "/api/positions")
+        self.assertEqual(len(json.loads(pos)["positions"]), 1)
+        _, pf = self.srv.request("GET", "/api/portfolio")
+        self.assertLess(json.loads(pf)["cash"], 10000)
+
+    def test_simulate_single_http_response(self):
+        # raw socket: exactly ONE HTTP response for one request — the bug
+        # wrote a second {"status":"reset"} response after the filled one.
+        body = json.dumps({"symbol": "BTCUSDT", "side": "SELL", "price": 100}).encode()
+        s = socket.create_connection(("127.0.0.1", self.srv.port), timeout=5)
+        req = (f"POST /api/trade/simulate HTTP/1.0\r\nHost: t\r\n"
+               f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n").encode() + body
+        s.sendall(req)
+        time.sleep(0.3)  # let the server write everything before we read
+        s.shutdown(socket.SHUT_WR)
+        data = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+        s.close()
+        self.assertEqual(data.count(b"HTTP/1.0"), 1,
+                         f"expected exactly one HTTP response, got:\n{data[:400]}")
 
 
 if __name__ == "__main__":

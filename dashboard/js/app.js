@@ -780,6 +780,8 @@ function resetAccount(){
   fetch('/api/reset',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
     alert(I18n.t('alert_reset',{cap:d.capital.toLocaleString()}));
     loadAccount();
+  }).catch(function(){ // N-8: surface reset failures instead of dying silently
+    alert(I18n.t('err_prefix')+I18n.t('api_error'));
   });
 }
 function removeSymbol(el){

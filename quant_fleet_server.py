@@ -1160,10 +1160,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._json(400,{"error":"price must be > 0"}); return
             r = execute_trade(sym,side,price,body.get("strategy","manual"))
             self._json(200,r if r else {"error":"Insufficient funds or no position"})
+        elif self.path=="/api/reset":
+            # T-01 (C-1/C-2): restore the reset branch — commit 360ffe2
+            # accidentally deleted this branch header, merging the reset body
+            # into /api/trade/simulate (which then wiped the account after
+            # every simulated trade and wrote a second HTTP response).
             with db_lock:
-                get_db().execute("DELETE FROM trades");
-                get_db().execute("DELETE FROM positions");
-                get_db().execute("DELETE FROM signals");
+                get_db().execute("DELETE FROM trades")
+                get_db().execute("DELETE FROM positions")
+                get_db().execute("DELETE FROM signals")
                 get_db().execute("UPDATE portfolio SET cash=?,updated_at=datetime('now', '+8 hours') WHERE id=1", (INITIAL_CAPITAL,))
                 get_db().commit()
             with log_lock: exec_log.clear()
