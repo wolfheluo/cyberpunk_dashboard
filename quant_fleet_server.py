@@ -47,6 +47,7 @@ exec_log = []
 log_lock = threading.Lock()
 active_strategy = "default.js"
 
+
 def add_log(ts, msg_type, html):
     with log_lock:
         exec_log.append({"ts":ts,"type":msg_type,"html":html})
@@ -556,7 +557,11 @@ def fetch_all_data():
             }
         })
 
-    signals_map = run_js_strategy(active_strategy, ticker_infos) or {}
+    # No active strategy after a reset — signals stay HOLD until the user picks one.
+    if active_strategy:
+        signals_map = run_js_strategy(active_strategy, ticker_infos) or {}
+    else:
+        signals_map = {}
 
     # Pass 2: record signals, auto-execute trades, build ticker rows
     for info in ticker_infos:
@@ -852,6 +857,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             r = execute_trade(sym,side,price,body.get("strategy","manual"))
             self._json(200,r if r else {"error":"Insufficient funds or no position"})
         elif self.path=="/api/reset":
+            global _trading_paused_until
             with db_lock:
                 db_conn.execute("DELETE FROM trades");
                 db_conn.execute("DELETE FROM positions");
@@ -859,7 +865,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 db_conn.execute("UPDATE portfolio SET cash=?,updated_at=datetime('now', '+8 hours') WHERE id=1", (INITIAL_CAPITAL,))
                 db_conn.commit()
             with log_lock: exec_log.clear()
-            self._json(200,{"status":"reset","capital":INITIAL_CAPITAL})
+            active_strategy = ""  # no strategy after reset — user picks one when ready
+            self._json(200,{"status":"reset","capital":INITIAL_CAPITAL,"active_strategy":""})
         elif self.path == "/api/strategy/create":
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
             try:

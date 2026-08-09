@@ -33,7 +33,7 @@ var strategiesList=[],activeStratFile='',editingFile='';
 function loadStrategies(){
   fetch('/api/strategies').then(function(r){return r.json();}).then(function(d){
     strategiesList=d.strategies;activeStratFile=d.active;loadActiveJSStrategy();
-    var as=document.getElementById('acctStrategySelect');if(as){as.innerHTML='';for(var j=0;j<strategiesList.length;j++){var ss=strategiesList[j];as.innerHTML+='<option value="'+ss.filename+'"'+(ss.filename===d.active?' selected':'')+'>'+ss.name+'</option>';}}
+    var as=document.getElementById('acctStrategySelect');if(as){as.innerHTML='<option value="">No strategy selected</option>';for(var j=0;j<strategiesList.length;j++){var ss=strategiesList[j];as.innerHTML+='<option value="'+ss.filename+'"'+(ss.filename===d.active?' selected':'')+'>'+ss.name+'</option>';}}
   });
 }
 function activateStrategy(fname){
