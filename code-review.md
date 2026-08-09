@@ -285,4 +285,9 @@ def _read_json(self):
 
 修復已完成（T-01~T-08, commits `127d4ab` → `5abe4ec`，25 tests 全綠 + live 冒煙測試通過）。
 
+**code-review 覆核（2026-08-09，requesting-code-review skill）**：獨立 reviewer 首次判定 fail，抓出 2 個問題並已修復（27 tests 全綠）：
+- Point 1：HEAD /api/data 觸發完整交易管線 → 現提前 return `{"alive": true}`，probe 無副作用
+- Point 2：bookTicker mid override 在 re-mark 迴圈之後 → 已移到之前，current_price/unrealized_pnl 與策略執行同 poll 一致
+- 第二輪 reviewer 判定 ✅ passed（無 security/logic 問題）
+
 *本文件為審計 ledger：每項修復後更新狀態（✅/⏳）並保留至使用者確認移除。*

@@ -342,5 +342,58 @@ class MalformedJsonTests(unittest.TestCase):
         self.assertEqual(status, 200)
 
 
+class HeadNoSideEffectTests(unittest.TestCase):
+    """Code-review finding (Point 1): HEAD /api/data must NOT trigger the
+    trading pipeline (do_HEAD delegated to do_GET, which called fetch_all_data
+    and auto-executed trades). A HEAD request is a probe — it must be side-
+    effect free even when an always-BUY strategy is active."""
+
+    ALWAYS_BUY = """({
+  NAME: "Always Buy",
+  DESCRIPTION: "code-review HEAD side-effect probe",
+  evaluate: function (ticker, indicators) {
+    return {signal: "BUY", confidence: 99};
+  }
+})
+"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+        cls.srv.request("POST", "/api/strategy/create",
+                        json.dumps({"filename": "head_probe.js"}).encode())
+        cls.srv.request("POST", "/api/strategy/head_probe.js/save",
+                        json.dumps({"code": cls.ALWAYS_BUY}).encode())
+        cls.srv.request("POST", "/api/strategy/activate",
+                        json.dumps({"filename": "head_probe.js"}).encode())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.request("POST", "/api/strategy/head_probe.js/delete")
+        cls.srv.stop()
+
+    def _trade_count(self):
+        _, body = self.srv.request("GET", "/api/trades")
+        return len(json.loads(body)["trades"])
+
+    def test_head_api_data_does_not_execute_trades(self):
+        # active always-BUY strategy: a GET would trade; a HEAD must not.
+        # Reset first so the count is deterministic.
+        self.srv.request("POST", "/api/reset")
+        self.srv.request("POST", "/api/strategy/activate",
+                         json.dumps({"filename": "head_probe.js"}).encode())
+        before = self._trade_count()
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.port, timeout=5)
+        c.putrequest("HEAD", "/api/data", skip_accept_encoding=True)
+        c.endheaders()
+        r = c.getresponse()
+        r.read()
+        c.close()
+        self.assertEqual(r.status, 200, "HEAD /api/data must answer 200")
+        after = self._trade_count()
+        self.assertEqual(after, before,
+                         f"HEAD must not execute trades (before={before}, after={after})")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

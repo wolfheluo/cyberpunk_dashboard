@@ -250,5 +250,56 @@ class LivePriceTests(unittest.TestCase):
         self.assertEqual(self._btc_price(), 150.0)
 
 
+class RemarkLivePriceTests(unittest.TestCase):
+    """Code-review finding (Point 2): the bookTicker mid override runs AFTER
+    the positions re-mark loop, so persisted current_price/unrealized_pnl use
+    the 60s-tick24 price while strategy eval uses the live mid — intra-poll
+    inconsistency. The re-mark must use the same live price."""
+
+    def setUp(self):
+        srv.active_strategy = ""
+        srv._last_signal = {}
+        srv._ticker24_cache = None
+        srv._ticker24_ts = 0.0
+        srv._klines_cache = {}
+        srv._klines_cache_ts = {}
+        srv._book_cache = None
+        srv._book_cache_ts = 0.0
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("DELETE FROM signals")
+            db.execute("UPDATE portfolio SET cash=10000 WHERE id=1")
+            db.execute("INSERT INTO positions (symbol,side,entry_price,quantity,"
+                       "current_price,unrealized_pnl,strategy) "
+                       "VALUES ('BTC','BUY',50,2,50,0,'t')")
+            db.commit()
+        self._saved = (srv.fetch_json, srv.fetch_klines_cached)
+        srv.fetch_klines_cached = _fake_klines
+        srv.fetch_json = lambda url: (
+            [{"symbol": "BTCUSDT", "lastPrice": "150", "priceChangePercent": "1",
+              "quoteVolume": "1000000", "highPrice": "151", "lowPrice": "149"}]
+            if "24hr" in url else
+            [{"symbol": "BTCUSDT", "bidPrice": "99.9", "askPrice": "100.1",
+              "bidQty": "1", "askQty": "2"}] if "bookTicker" in url else None)
+
+    def tearDown(self):
+        srv.fetch_json, srv.fetch_klines_cached = self._saved
+        srv._ticker24_cache = None
+        srv._ticker24_ts = 0.0
+        srv._book_cache = None
+        srv._book_cache_ts = 0.0
+
+    def test_remark_uses_live_book_mid(self):
+        srv.fetch_all_data()
+        with srv.db_lock:
+            row = srv.get_db().execute(
+                "SELECT current_price, unrealized_pnl FROM positions WHERE symbol='BTC'").fetchone()
+        # live mid 100.0 -> current_price 100.0, unrealized (100-50)*2 = 100
+        self.assertEqual(row[0], 100.0, f"current_price must be the live mid, got {row[0]}")
+        self.assertEqual(row[1], 100.0, row)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

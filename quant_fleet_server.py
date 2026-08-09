@@ -710,6 +710,23 @@ def fetch_all_data():
         for r in get_db().execute("SELECT symbol,side,quantity,entry_price FROM positions"):
             positions_map[r[0]] = {"side":r[1],"quantity":r[2],"entry_price":r[3]}
 
+    # Live price override (T-05/M-3 + code-review Point 2): the 24hr ticker is
+    # 60s cached; bookTicker (3s TTL) is already fetched every poll. Override
+    # price_map with the mid BEFORE the re-mark loop so persisted current_price/
+    # unrealized_pnl, strategy eval, equity and execution all use the same
+    # near-live price within one poll.
+    book_map = {}
+    bt_raw = fetch_book_cached()  # D11/N-3: TTL-cached (3s), not per-poll
+    if bt_raw:
+        for b in bt_raw:
+            book_map[b["symbol"]] = b
+            try:
+                bid = float(b["bidPrice"]); ask = float(b["askPrice"])
+                if bid > 0 and ask > 0 and b["symbol"] in price_map:
+                    price_map[b["symbol"]]["price"] = (bid + ask) / 2
+            except (KeyError, TypeError, ValueError):
+                pass
+
     # Re-mark open positions with current prices (positions would otherwise be stale)
     with db_lock:
         for r in get_db().execute("SELECT symbol,side,quantity,entry_price FROM positions").fetchall():
@@ -728,24 +745,6 @@ def fetch_all_data():
         # D8/M-2: compare against the same base the INSERT writes (UTC).
         # The old mix (stored UTC+8 vs datetime.now() UTC) never throttled.
         should_record = not last_rec or (datetime.utcnow() - datetime.fromisoformat(last_rec)).total_seconds() > 300
-
-    # Pass 1: build ticker + indicators for every watchlist symbol, then evaluate
-    # the active JS strategy ONCE via node subprocess (no more hardcoded HOLD).
-    book_map = {}
-    bt_raw = fetch_book_cached()  # D11/N-3: TTL-cached (3s), not per-poll
-    if bt_raw:
-        for b in bt_raw:
-            book_map[b["symbol"]] = b
-            # T-05 (M-3): price must be live — the 24hr ticker is 60s cached,
-            # so strategy eval and execution were acting on stale prices while
-            # the frontend showed live WS prices. bookTicker (3s TTL) is
-            # already fetched every poll; use its mid as the execution price.
-            try:
-                bid = float(b["bidPrice"]); ask = float(b["askPrice"])
-                if bid > 0 and ask > 0 and b["symbol"] in price_map:
-                    price_map[b["symbol"]]["price"] = (bid + ask) / 2
-            except (KeyError, TypeError, ValueError):
-                pass
 
     # Portfolio snapshot for strategy params (position + available cash + equity)
     with db_lock:
@@ -1053,6 +1052,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path=="/api/data":
+            if self.command == "HEAD":
+                # Code-review (Point 1): HEAD is a probe — it must not run the
+                # trading pipeline (fetch_all_data auto-executes strategies).
+                self._json(200, {"alive": True})
+                return
             data = fetch_all_data()
             self._json(502 if not data else 200, data or {"error":"Binance down"})
         elif self.path=="/api/strategies":
