@@ -6,7 +6,18 @@ function L(ln){return fetch('/dashboard/i18n/'+ln+'.json').then(function(r){retu
 function T(k,p){var dd=d[l]||d['en']||{},s=dd[k]||(d['en']&&d['en'][k])||k;if(p){for(var kk in p)s=s.split('{'+kk+'}').join(p[kk]);}return s;}
 function B(){var es=document.querySelectorAll('[data-i18n]');for(var i=0;i<es.length;i++){var e=es[i],k=e.getAttribute('data-i18n');if(k)e.textContent=T(k);}}
 function I(){return Promise.all([L('en'),L('zh')]).then(function(){r=true;B();q.forEach(function(f){f();});q=[];});}
-return{init:I,t:T,setLang:function(ln){l=ln;document.getElementById('btnEN').className='lang-btn'+(ln==='en'?' active':'');document.getElementById('btnZH').className='lang-btn'+(ln==='zh'?' active':'');B();if(typeof R==='function')R();},ready:function(f){if(r)f();else q.push(f);}};})();
+return{init:I,t:T,setLang:function(ln){
+  l=ln;
+  document.getElementById('btnEN').className='lang-btn'+(ln==='en'?' active':'');
+  document.getElementById('btnZH').className='lang-btn'+(ln==='zh'?' active':'');
+  B();
+  if(typeof R==='function')R();
+  // Reload page data so dynamically-built tables (account cycles, backtest,
+  // watchlist) re-render in the newly selected language.
+  if(currentPage==='account'&&typeof loadAccount==='function')loadAccount();
+  else if(currentPage==='backtest'&&typeof runBacktest==='function')runBacktest();
+  else if(currentPage==='watchlist'&&typeof loadSymbols==='function')loadSymbols();
+},ready:function(f){if(r)f();else q.push(f);}};})();
 
 // ============================================================
 // SIDEBAR & PAGES
