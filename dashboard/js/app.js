@@ -166,18 +166,19 @@ function renderBacktestResults(statusText,statusClass){
   drawBTCanvas();
 }
 function btCacheKey(){return strategiesList.map(function(s){return s.filename;}).sort().join(',');}
-function runBacktest(){
+function runBacktest(force){
   var key=btCacheKey();
 
   // Cached results? Reuse them — recompute only after the page is closed
-  // (sessionStorage) or when strategies changed since the last run.
+  // (sessionStorage), when strategies changed, or when the user hits RE-RUN.
   var cache=null;
   try{cache=JSON.parse(sessionStorage.getItem('qf_backtest')||'null');}catch(e){}
-  if(cache&&cache.key===key&&cache.backtests&&cache.backtests.length){
+  if(!force&&cache&&cache.key===key&&cache.backtests&&cache.backtests.length){
     btData=cache.backtests;
     renderBacktestResults(I18n.t('cached')+' '+cache.ts+' \u2014 '+btData.length+' '+I18n.t('results'),'text-[15px] text-[#00E5FF] mb-2');
     return;
   }
+  if(force){try{sessionStorage.removeItem('qf_backtest');}catch(e){}}
 
   var st=document.getElementById('backtestStatus');
   st.textContent=I18n.t('computing');

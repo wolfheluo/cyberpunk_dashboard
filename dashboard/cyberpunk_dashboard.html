@@ -180,8 +180,9 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
     <div id="page-backtest" class="page">
       <div class="flex flex-1 overflow-hidden">
         <div class="w-[45%] border-r border-[#1E222D] overflow-y-auto p-3">
-          <div class="mb-3">
+          <div class="mb-3 flex justify-between items-center">
             <span class="text-base text-[#00E5FF]" data-i18n="backtest_subtitle">BACKTEST (2025-01 → 2026-06, $10k)</span>
+            <button class="btn-sm" onclick="runBacktest(true)" data-i18n="btn_rerun">↺ RE-RUN</button>
           </div>
           <div id="backtestStatus" class="text-[11px] text-[#FFCC00] mb-2"></div>
           <div id="backtestSummary">

@@ -139,5 +139,6 @@
   "log_reason_db": "database write error",
   "log_reason_unknown": "unknown",
   "log_conf": "conf {c}",
-  "log_action_filled": "FILLED"
+  "log_action_filled": "FILLED",
+  "btn_rerun": "↺ RE-RUN"
 }

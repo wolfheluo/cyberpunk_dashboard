@@ -139,5 +139,6 @@
   "log_reason_db": "資料庫寫入錯誤",
   "log_reason_unknown": "未知原因",
   "log_conf": "信心 {c}",
-  "log_action_filled": "已成交"
+  "log_action_filled": "已成交",
+  "btn_rerun": "↺ 重新回測"
 }
