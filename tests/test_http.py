@@ -308,5 +308,39 @@ class HeadRequestTests(unittest.TestCase):
         self.assertEqual(headers.get("Content-Length"), str(len(g_body)))
 
 
+class MalformedJsonTests(unittest.TestCase):
+    """T-08 (M-7): POST endpoints must answer 400 on malformed/missing JSON
+    instead of crashing the handler (json.loads raised -> dead connection)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.stop()
+
+    def test_activate_malformed_json_400(self):
+        status, body = self.srv.request("POST", "/api/strategy/activate", b"not-json{")
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(body), {"error": "Invalid JSON"})
+
+    def test_create_empty_body_400(self):
+        status, body = self.srv.request("POST", "/api/strategy/create", b"")
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(body), {"error": "Invalid JSON"})
+
+    def test_simulate_malformed_json_400(self):
+        status, body = self.srv.request("POST", "/api/trade/simulate", b"[[[")
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(body), {"error": "Invalid JSON"})
+
+    def test_valid_json_still_works(self):
+        # regression guard: valid activate still 200
+        status, _ = self.srv.request("POST", "/api/strategy/activate",
+                                     json.dumps({"filename": "grid.js"}).encode())
+        self.assertEqual(status, 200)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

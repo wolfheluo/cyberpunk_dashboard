@@ -1169,7 +1169,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if self.path=="/api/strategy/activate":
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
+            body = self._read_json()
+            if body is None:
+                self._json(400, {"error": "Invalid JSON"}); return
             try:
                 fname = _safe_strategy_name(body.get("filename",""))
             except ValueError:
@@ -1184,7 +1186,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._json(200,{"active":fname,"name":name or fname})
             else: self._json(400,{"error":f"Unknown: {fname}"})
         elif self.path=="/api/trade/simulate":
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
+            body = self._read_json()
+            if body is None:
+                self._json(400, {"error": "Invalid JSON"}); return
             sym=body.get("symbol",""); side=body.get("side","BUY"); price=body.get("price",0)
             # M-5: validate before touching the account — was: any symbol/side/price
             # could inject fake trades (unauthenticated, LAN-reachable).
@@ -1214,7 +1218,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             active_strategy = ""  # no strategy after reset — user picks one when ready
             self._json(200,{"status":"reset","capital":INITIAL_CAPITAL,"active_strategy":""})
         elif self.path == "/api/strategy/create":
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
+            body = self._read_json()
+            if body is None:
+                self._json(400, {"error": "Invalid JSON"}); return
             try:
                 fname = _safe_strategy_name(body.get("filename","").strip() or "new_strategy.js")
             except ValueError:
@@ -1250,7 +1256,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not os.path.isfile(path):
                 self._json(404, {"error": "Strategy not found"})
             else:
-                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                body = self._read_json()
+                if body is None:
+                    self._json(400, {"error": "Invalid JSON"}); return
                 new_code = body.get("code", "")
                 if new_code:
                     # D17/M-10: syntax-check before persisting — a broken file
@@ -1304,7 +1312,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200, {"backtests": results, "count": len(results)})
 
         elif self.path == "/api/symbols/add":
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
+            body = self._read_json()
+            if body is None:
+                self._json(400, {"error": "Invalid JSON"}); return
             sym = body.get("symbol","").upper().strip()
             name = body.get("name", sym.replace("USDT",""))
             # D18: charset allowlist — rejects HTML/attribute-breakout payloads
@@ -1330,6 +1340,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200, {"status":"deleted","symbol":sym})
         else:
             self.send_error(405)
+
+    def _read_json(self):
+        """T-08 (M-7): parse the request body as JSON; None on malformed or
+        missing body — handlers answer 400 instead of crashing the thread."""
+        try:
+            raw = self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
+            if not raw:
+                return None
+            return json.loads(raw)
+        except (ValueError, TypeError):
+            return None
 
     def _json(self,code,data):
         body=json.dumps(data).encode()
