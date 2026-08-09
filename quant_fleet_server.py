@@ -252,11 +252,12 @@ def fetch_klines_cached(symbol, interval, limit=100, ttl=60):
 # ============================================================
 # TRADE EXECUTION
 # ============================================================
-def execute_trade(symbol, side, price, strategy_name, signal_id=None):
+def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=1.0):
     """Execute a paper trade.
 
     BUY  — opens/adds a long position, or covers an existing short.
-    SELL — closes an existing long, or opens/adds a short position.
+    SELL — closes an existing long (close_pct of it, default 100%), or opens
+           a short position when flat.
 
     Returns one of:
       {"status":"filled", "trade_id":..., "quantity":..., "notional":..., "realized_pnl":...}
@@ -305,12 +306,18 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None):
                     db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
                                     (symbol, "BUY", price, qty, price, 0.0, strategy_name))
             elif side == "SELL" and pos and pos[0] == "BUY":
-                # ---- Close long: liquidate entire position ----
-                qty = pos[1]
+                # ---- Close long: close close_pct of the position (grid trading) ----
+                close_pct = min(max(float(close_pct or 1.0), 0.01), 1.0)
+                qty = pos[1] * close_pct
                 notional = qty * price
                 realized = (price - pos[2]) * qty
                 cash_change = notional
-                db_conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
+                remain = pos[1] - qty
+                if remain <= 0.00001:
+                    db_conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
+                else:
+                    db_conn.execute("UPDATE positions SET quantity=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                                    (remain, price, (price - pos[2]) * remain, symbol))
             else:
                 # ---- Open / add short ----
                 if cash < MIN_CASH:
@@ -631,7 +638,8 @@ def fetch_all_data():
             elif (current_pos and current_pos["side"] == "SELL") or (not current_pos):
                 trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)  # open or add short
             elif current_pos and current_pos["side"] == "BUY":
-                trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)  # close long
+                trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id,
+                                             close_pct=sig.get("close_pct", 1.0))  # close long (partial for grids)
         if trade_result:
             st = trade_result.get("status")
             event = {"symbol": sym, "side": signal, "price": price,

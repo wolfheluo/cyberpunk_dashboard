@@ -30,7 +30,8 @@ process.stdin.on('end', () => {
           signal: out.signal || 'HOLD',
           confidence: typeof out.confidence === 'number' ? out.confidence : 50,
           factors: out.factors || {},
-          add: !!out.add  // strategy requests an add-on to an existing position
+          add: !!out.add,  // strategy requests an add-on to an existing position
+          close_pct: typeof out.close_pct === 'number' ? out.close_pct : 1.0  // partial close ratio
         };
       } catch (e) {
         results[t.id] = {signal: 'HOLD', confidence: 50, error: String(e)};
