@@ -172,5 +172,66 @@ class ResetAndSimulateTests(unittest.TestCase):
                          f"expected exactly one HTTP response, got:\n{data[:400]}")
 
 
+class BacktestAtrLookaheadTests(unittest.TestCase):
+    """T-03 (M-4): backtest atr14 must only use bars up to the current point.
+
+    Dataset: 60 low-volatility bars (ATR ~1) then 40 high-volatility bars
+    (ATR ~20). An ATR Probe strategy BUYs while atr14 < 5 and SELLs while
+    atr14 > 5. With lookahead (the bug: calcATR on the WHOLE array), atr14 is
+    constant ~20 from bar 0 -> only SELLs, buy_count == 0. Fixed: early bars
+    atr14 ~1 -> BUY, late bars -> SELL.
+    """
+
+    STRAT_CODE = """({
+  NAME: "ATR Probe",
+  DESCRIPTION: "atr14 lookahead probe",
+  evaluate: function (ticker, indicators) {
+    if (indicators.atr14 < 5) return {signal: "BUY", confidence: 80};
+    if (indicators.atr14 > 5) return {signal: "SELL", confidence: 80};
+    return {signal: "HOLD", confidence: 50};
+  }
+})
+"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+        # seed historical_klines: 60 low-vol + 40 high-vol daily bars
+        conn = sqlite3.connect(cls.srv.db)
+        conn.execute("DELETE FROM historical_klines")
+        rows = []
+        for i in range(100):
+            amp = 0.5 if i < 60 else 10.0
+            close = 100 + amp
+            rows.append(("BTCUSDT", f"2025-{(i // 28) + 1:02d}-{(i % 28) + 1:02d}",
+                         100, close + amp, close - amp, close, 1000000))
+        conn.executemany("INSERT OR REPLACE INTO historical_klines "
+                         "(symbol,date,open,high,low,close,volume) VALUES (?,?,?,?,?,?,?)", rows)
+        conn.commit()
+        conn.close()
+        # create the probe strategy via the API (real path)
+        status, _ = cls.srv.request("POST", "/api/strategy/create",
+                                    json.dumps({"filename": "atr_probe.js"}).encode())
+        assert status == 200, status
+        status, body = cls.srv.request("POST", "/api/strategy/atr_probe.js/save",
+                                       json.dumps({"code": cls.STRAT_CODE}).encode())
+        assert status == 200, (status, body)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.request("POST", "/api/strategy/atr_probe.js/delete")
+        cls.srv.stop()
+
+    def test_atr_probe_buys_early_and_sells_late(self):
+        status, body = self.srv.request("POST", "/api/backtest/run")
+        self.assertEqual(status, 200, body[:200])
+        data = json.loads(body)
+        bt = next(b for b in data["backtests"]
+                  if b["strategy"] == "ATR Probe" and b["symbol"] == "BTCUSDT")
+        self.assertGreaterEqual(bt["buy_count"], 1,
+                                f"early low-vol bars must BUY — atr14 has lookahead? {bt}")
+        self.assertGreaterEqual(bt["sell_count"], 1, bt)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

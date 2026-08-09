@@ -100,7 +100,10 @@ function backtestOne(strategy, symbol, klines) {
       ema50: calcEMA(closesHistory, 50),
       macd_line: macd[0], macd_signal: macd[1], macd_hist: macd[2],
       bb_upper: bb[0], bb_middle: bb[1], bb_lower: bb[2],
-      atr14: calcATR(klines, 14),
+      // T-03 (M-4): ATR must not see future bars — the old calcATR(klines, 14)
+      // sliced the LAST 14 bars of the whole dataset (lookahead: atr14 was
+      // constant from bar 0). Slice up to the current bar only.
+      atr14: calcATR(klines.slice(0, i + 1), 14),
       // Daily data only — 4h values mirror the daily series in backtests.
       rsi_4h: calcRSI(closesHistory, 14),
       sma_4h: calcSMA(closesHistory, 20),
