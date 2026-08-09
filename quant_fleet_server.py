@@ -60,7 +60,7 @@ reload_symbols()
 db_lock = threading.Lock()
 exec_log = []
 log_lock = threading.Lock()
-active_strategy = "default.js"
+active_strategy = ""  # no built-in strategy (D3/C-3): user creates one
 _last_signal = {}  # symbol → last signal; decision log only records changes
 
 
@@ -1143,7 +1143,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             else:
                 os.remove(path)
                 if active_strategy == fname:
-                    active_strategy = "default.js"
+                    active_strategy = ""  # deleted the active strategy — go flat (D3/C-3)
                 self._json(200, {"status":"deleted","filename":fname})
         elif self.path.startswith("/api/strategy/") and self.path.endswith("/save"):
             try:
@@ -1245,6 +1245,8 @@ def main():
     port = int(os.environ.get("QF_PORT", 8899))
     print(f"Quant Fleet on http://localhost:{port}")
     print(f"Initial capital: ${INITIAL_CAPITAL:,.0f}")
+    if not active_strategy:
+        print("No active strategy — create one from the STRATEGIES page (D3/C-3)")
     if HAS_NODE:
         print(f"Node.js: OK (strategy eval + backtest engine)")
     else:

@@ -18,9 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 15 | C-1, C-2, C-4, C-5, M-1, M-2, M-4, M-5, M-6, M-7, M-8, M-10, N-9, N-15, N-26 |
+| ✅ 已修補（含測試證據） | 16 | C-1, C-2, C-3, C-4, C-5, M-1, M-2, M-4, M-5, M-6, M-7, M-8, M-10, N-9, N-15, N-26 |
 | ⏳ 未修補（spec 已規劃未執行） | 34 | M-9, N-1 ~ N-8, N-10 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
-| 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
 | ✅ 設計維持 | 1 | I-11 |
@@ -50,7 +49,7 @@
 **修復**：fname 白名單（僅 en.json/zh.json）或 realpath 邊界檢查
 
 ### C-3. 三支策略檔被誤刪（default.js / OBI.js / ppmb.js）
-**修補狀態**：🚫 **決策：不恢復**（spec D3，使用者決策：無內建策略）— 但配套待辦未完成：server line 48 `active_strategy` 仍 `"default.js"`（應改 `""`），README line 60/188 仍宣稱 default.js 為內建策略；strategies/ 僅剩 grid.js 屬預期
+**修補狀態**：✅ **決策 + 配套完成**（2026-08-09，spec D3）— 不恢復三檔（使用者決策：無內建策略）；`active_strategy` 預設改 `""`（含刪除 active 策略的 fallback）；README 移除「Built-in default.js」表，改為「無內建策略」+ 新增 grid.js 說明 + size_pct/close_pct/add 參數文件；啟動時印警告。grep 全倉 `default.js` 零殘留
 
 **檔案**：`strategies/`（commit `82ef484` diff 意外刪除）
 **問題**：commit 82ef484（僅權益曲線樣式）的 `git add -A` 把三支策略檔的刪除一起納入 — 可能為 UI 測試期間誤刪。HEAD 只剩 grid.js

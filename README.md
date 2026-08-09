@@ -57,7 +57,7 @@ dashboard/
   css/style.css              Cyberpunk theme
   i18n/en.json, zh.json      Translation dictionaries
 strategies/
-  default.js                 Built-in strategy (object literal: NAME/DESCRIPTION/evaluate)
+  grid.js                    Grid trading strategy (long/short, size_pct pyramiding)
   _run_strategy.js           Node helper — evaluates the active strategy for live signals
   _run_backtest.js           Node helper — runs backtests for all symbols in one call
 quant_fleet.db               SQLite database (auto-created, git-ignored)
@@ -181,11 +181,22 @@ and backtesting (via `_run_backtest.js`), so results stay consistent.
 
 Download the full parameter reference from the STRATEGIES page (**PARAMS** button).
 
-### Built-in Strategy
+### Strategies
 
-| File        | Strategy            | Logic                              |
-|-------------|---------------------|------------------------------------|
-| `default.js`| Simple RSI Strategy | RSI < 30 → BUY, RSI > 70 → SELL   |
+There are **no built-in strategies** — create your own from the STRATEGIES page
+(+ NEW button) or drop a `.js` file into `strategies/`. Each strategy is an
+object literal with `NAME`, `DESCRIPTION` and an `evaluate(ticker, indicators)`
+function returning `{signal: "BUY"|"SELL"|"HOLD", confidence, size_pct,
+close_pct, add}`.
+
+| Signal param  | Meaning                                                    | Default |
+|---------------|------------------------------------------------------------|---------|
+| `size_pct`    | Notional size when opening/adding (grids scale 2%→6%)     | 5%      |
+| `close_pct`   | Fraction of the position closed on an opposite signal     | 1.0     |
+| `add`         | Allow same-side add-on while a position is held           | false   |
+
+`grid.js` is included as a reference implementation (symmetric long/short
+grid, ±10% band at 0.1% per level).
 
 ---
 
