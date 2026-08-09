@@ -1,11 +1,11 @@
 ({
   NAME: "Grid Trading",
-  DESCRIPTION: "網格交易：以進場價為中心建立 ±10% 密集網格（每格 0.5%）。下跌每穿一格買入（遠格倉位遞增：depth d → size = 1%×(1+0.2×(d-1)) cash），上漲每穿一格賣出一份額（部分平倉），低買高賣賺取格差；穿出網格區間停止交易等待回彈，全部格出清後以現價重新建立網格。",
-  GRID_LEVELS: 20,
-  GRID_STEP_PCT: 0.5,
-  BASE_SIZE_PCT: 0.01,   // first lot = 1% of cash
-  SIZE_GROWTH: 0.2,      // each deeper level adds +20% of the base lot size
-  MAX_SIZE_PCT: 0.05,    // cap the deepest lots at 5% of cash
+  DESCRIPTION: "網格交易（激進版）：以進場價為中心建立 ±3% 密集網格（每格 0.1%，0.1% 變動即觸發，不防假訊號）。下跌每穿一格買入（遠格倉位遞增：depth d → size = 2%×(1+0.25×(d-1)) cash，上限 6%），上漲每穿一格賣出一份額（部分平倉），低買高賣賺取格差；穿出網格區間停止交易等待回彈，全部格出清後以現價重新建立網格。",
+  GRID_LEVELS: 30,
+  GRID_STEP_PCT: 0.1,
+  BASE_SIZE_PCT: 0.02,   // first lot = 2% of cash
+  SIZE_GROWTH: 0.25,     // each deeper level adds +25% of the base lot size
+  MAX_SIZE_PCT: 0.06,    // cap the deepest lots at 6% of cash
   grids: {},
 
   lotSize: function (depth) {
@@ -48,11 +48,7 @@
     var gridPos = Math.round((price - g.center) / g.step);
     var factors = { action: "grid_hold", grid: gridPos };
 
-    // Hysteresis: only act after the price has travelled at least half a step.
-    if (Math.abs(price - g.last) < g.step * 0.5) {
-      return { signal: "HOLD", confidence: 50, factors: factors };
-    }
-
+    // No hysteresis: every 0.1% move acts immediately (aggressive mode).
     // idx = lots currently held (negative). Move AT MOST one level per tick —
     // a fast move across several levels is caught by subsequent ticks, so the
     // lot-size math (close_pct = 1/|idx|) always stays correct.
