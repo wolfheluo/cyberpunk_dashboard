@@ -69,7 +69,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS prices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT NOT NULL, price REAL NOT NULL,
-            recorded_at TEXT DEFAULT (datetime('now', '+8 hours'))
+            recorded_at TEXT DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_prices_symbol ON prices(symbol);
         CREATE INDEX IF NOT EXISTS idx_prices_time ON prices(recorded_at);

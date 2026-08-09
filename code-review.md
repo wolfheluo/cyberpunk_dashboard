@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 14 | C-1, C-2, C-4, C-5, M-1, M-4, M-5, M-6, M-7, M-8, M-10, N-9, N-15, N-26 |
-| ⏳ 未修補（spec 已規劃未執行） | 35 | M-2, M-9, N-1 ~ N-8, N-10 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 15 | C-1, C-2, C-4, C-5, M-1, M-2, M-4, M-5, M-6, M-7, M-8, M-10, N-9, N-15, N-26 |
+| ⏳ 未修補（spec 已規劃未執行） | 34 | M-9, N-1 ~ N-8, N-10 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -86,7 +86,7 @@
 **修復**：`execute_trade(sym, "SELL", price, strategy_name, signal_id, size_pct=sig.get("size_pct"))`
 
 ### M-2. prices 表 5 分鐘節流因時區混用失效
-**修補狀態**：⏳ **未修補** — line 615 仍 `datetime.now()`（UTC）vs `datetime('now','+8 hours')` 混用，prices 節流仍失效；spec D8 已規劃（最小範圍），未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D8 最小範圍）— tests/test_server_unit.py PriceThrottleTests 2/2 綠：整合測試抓到 recorded_at 寫入 UTC+8（差 8h）→ 修後寫入 `datetime('now')` UTC 且緊接第二輪 poll 正確節流（count 1）；stale（>5min）仍正常記錄；schema DEFAULT 同步改 UTC（init_db.py）
 
 **檔案**：`quant_fleet_server.py` 第 615 行
 **問題**：`recorded_at` 用 SQLite `datetime('now','+8 hours')`（UTC+8），比對卻用 `datetime.now()`（UTC 主機）→ 恆差 8 小時 → 節流永不觸發

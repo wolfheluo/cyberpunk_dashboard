@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from datetime import datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -139,6 +140,55 @@ class ErrorVisibilityTests(unittest.TestCase):
             srv.subprocess.run = real_run
         self.assertGreater(len(srv.exec_log), before)
         self.assertIn("fake.js", srv.exec_log[-1].get("html", ""))
+
+
+class PriceThrottleTests(unittest.TestCase):
+    """D8 (M-2): prices table must throttle to ~1 row per 5 minutes.
+
+    The bug: recorded_at stored as UTC+8 while the comparison used UTC — the
+    check always looked >5min old, so every poll inserted a row.
+    """
+
+    def setUp(self):
+        self.calls = []
+        srv.active_strategy = "fake.js"
+        srv._last_signal = {}
+        srv.fetch_json = _fake_fetch_json
+        srv.fetch_klines_cached = _fake_klines
+        srv.run_js_strategy = lambda *a, **k: {"BTC": {"signal": "HOLD"}}
+        srv.execute_trade = lambda *a, **k: {"status": "filled"}
+        with srv.db_lock:
+            srv.get_db().execute("DELETE FROM prices")
+            srv.get_db().commit()
+
+    def _count_prices(self):
+        with srv.db_lock:
+            return srv.get_db().execute("SELECT COUNT(*) FROM prices").fetchone()[0]
+
+    def test_first_record_is_utc_and_second_throttled(self):
+        # Empty table -> first poll records. After the fix the stored time is
+        # UTC (the same base the throttle compares against); the old code
+        # stored UTC+8, so the stored value was 8h ahead of datetime.now() and
+        # the comparison could never mean "fresh".
+        srv.fetch_all_data()
+        with srv.db_lock:
+            rows = srv.get_db().execute("SELECT recorded_at FROM prices").fetchall()
+        self.assertEqual(len(rows), 1)
+        rec = datetime.fromisoformat(rows[0][0])
+        self.assertLess(abs((datetime.utcnow() - rec).total_seconds()), 300,
+                        f"recorded_at must be UTC-ish, got {rows[0][0]!r}")
+        # Second poll right after: fresh record must suppress the insert
+        srv.fetch_all_data()
+        self.assertEqual(self._count_prices(), 1)
+
+    def test_stale_record_still_records(self):
+        with srv.db_lock:
+            srv.get_db().execute(
+                "INSERT INTO prices (symbol,price,recorded_at) VALUES "
+                "('BTCUSDT',100,datetime('now','-6 minutes'))")
+            srv.get_db().commit()
+        srv.fetch_all_data()
+        self.assertEqual(self._count_prices(), 2, "record older than 5min must be written")
 
 
 if __name__ == "__main__":

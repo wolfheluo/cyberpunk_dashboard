@@ -665,7 +665,9 @@ def fetch_all_data():
     # Record prices for historical tracking (every 5 min to avoid bloat)
     with db_lock:
         last_rec = get_db().execute("SELECT MAX(recorded_at) FROM prices").fetchone()[0]
-        should_record = not last_rec or (datetime.now() - datetime.fromisoformat(last_rec)).total_seconds() > 300
+        # D8/M-2: compare against the same base the INSERT writes (UTC).
+        # The old mix (stored UTC+8 vs datetime.now() UTC) never throttled.
+        should_record = not last_rec or (datetime.utcnow() - datetime.fromisoformat(last_rec)).total_seconds() > 300
 
     # Pass 1: build ticker + indicators for every watchlist symbol, then evaluate
     # the active JS strategy ONCE via node subprocess (no more hardcoded HOLD).
@@ -702,7 +704,7 @@ def fetch_all_data():
         if should_record and pm:
             try:
                 with db_lock:
-                    get_db().execute("INSERT INTO prices (symbol, price) VALUES (?, ?)", (sym, price))
+                    get_db().execute("INSERT INTO prices (symbol, price, recorded_at) VALUES (?, ?, datetime('now'))", (sym, price))
                     get_db().commit()
             except Exception:
                 pass
