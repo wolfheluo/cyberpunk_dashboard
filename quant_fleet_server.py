@@ -275,8 +275,9 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
             trade_side = side
 
             if side == "BUY" and pos and pos[0] == "SELL":
-                # ---- Cover short: buy back (may be partial if cash is limited) ----
-                qty = min(pos[1], cash / price) if price else 0
+                # ---- Cover short: buy back close_pct of it (partial covers for grids) ----
+                close_pct = min(max(float(close_pct or 1.0), 0.01), 1.0)
+                qty = min(pos[1] * close_pct, cash / price) if price else 0
                 if qty <= 0:
                     return {"status": "rejected", "reason": "insufficient_funds"}
                 notional = qty * price
@@ -635,7 +636,8 @@ def fetch_all_data():
                                              size_pct=sig.get("size_pct"))  # open or add long
             elif current_pos and current_pos["side"] == "SELL":
                 trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id,
-                                             size_pct=sig.get("size_pct"))  # cover short
+                                             size_pct=sig.get("size_pct"),
+                                             close_pct=sig.get("close_pct", 1.0))  # cover short (partial for grids)
         elif signal == "SELL":
             if current_pos and current_pos["side"] == "SELL" and not want_add:
                 pass  # repeated signal on a short — no-op unless add requested
