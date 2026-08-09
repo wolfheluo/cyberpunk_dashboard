@@ -301,5 +301,73 @@ class RemarkLivePriceTests(unittest.TestCase):
         self.assertEqual(row[1], 100.0, row)
 
 
+class ServerCorrectnessTests(unittest.TestCase):
+    """T-B: N-5 strategy_matrix shows ALL strategies (not [:4]); N-6 kpi
+    renamed pnl_day -> pnl_total (label was misleading: it is total P&L)."""
+
+    def setUp(self):
+        srv.active_strategy = ""
+        srv._last_signal = {}
+        self._saved = (srv.fetch_json, srv.fetch_klines_cached)
+        srv.fetch_klines_cached = _fake_klines
+        srv.fetch_json = lambda url: (
+            [{"symbol": "BTCUSDT", "lastPrice": "100", "priceChangePercent": "1",
+              "quoteVolume": "1000000", "highPrice": "101", "lowPrice": "99"}]
+            if "24hr" in url else
+            [{"symbol": "BTCUSDT", "bidPrice": "99.9", "askPrice": "100.1",
+              "bidQty": "1", "askQty": "2"}] if "bookTicker" in url else None)
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("DELETE FROM signals")
+            db.commit()
+        self._real_list = srv.list_js_strategies
+
+    def tearDown(self):
+        srv.fetch_json, srv.fetch_klines_cached = self._saved
+        srv.list_js_strategies = self._real_list
+
+    def test_matrix_includes_all_strategies(self):
+        # 6 fake strategies — the [:4] slice would only show 4
+        srv.list_js_strategies = lambda: [
+            {"filename": f"s{i}.js", "name": f"S{i}", "description": ""}
+            for i in range(6)]
+        d = srv.fetch_all_data()
+        self.assertEqual(len(d["strategy_matrix"]["strategies"]), 6,
+                         d["strategy_matrix"]["strategies"])
+        self.assertEqual(len(d["strategy_matrix"]["cells"]), 6 * 4)
+
+    def test_kpi_has_pnl_total_not_pnl_day(self):
+        d = srv.fetch_all_data()
+        self.assertIn("pnl_total", d["kpi"], d["kpi"].keys())
+        self.assertNotIn("pnl_day", d["kpi"])
+
+
+class StaticServerChecks(unittest.TestCase):
+    """T-B static seams: N-4 single exec_log cap, N-13 readable ternary,
+    N-14 no datetime.utcnow()."""
+
+    def _src(self):
+        with open(os.path.join(ROOT, "quant_fleet_server.py"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_single_exec_log_cap_constant(self):
+        src = self._src()
+        self.assertIn("EXEC_LOG_MAX = 200", src, "one named constant")
+        # no hardcoded 200/300 caps left in the two cap sites
+        self.assertNotIn("len(exec_log) > 300", src)
+        self.assertNotIn("len(exec_log)>200", src)
+        self.assertNotIn("del exec_log[:100]", src)
+
+    def test_no_utcnow(self):
+        self.assertNotIn("datetime.utcnow()", self._src())
+
+    def test_readable_decimal_ternary(self):
+        src = self._src()
+        self.assertNotIn("price < 1 and 4 or 2", src)
+        self.assertIn("4 if price < 1 else 2", src)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

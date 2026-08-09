@@ -395,5 +395,40 @@ class HeadNoSideEffectTests(unittest.TestCase):
                          f"HEAD must not execute trades (before={before}, after={after})")
 
 
+class StaticContentTypeTests(unittest.TestCase):
+    """T-B (N-7): static .html/.json served with correct Content-Type."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.stop()
+
+    def _get_ct(self, path):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.port, timeout=5)
+        c.putrequest("GET", path, skip_accept_encoding=True)
+        c.endheaders()
+        r = c.getresponse()
+        ct = r.getheader("Content-Type")
+        r.read()
+        c.close()
+        return ct
+
+    def test_html_content_type(self):
+        self.assertEqual(self._get_ct("/dashboard/cyberpunk_dashboard.html"), "text/html")
+
+    def test_js_content_type(self):
+        self.assertEqual(self._get_ct("/dashboard/js/app.js"), "application/javascript")
+
+    def test_css_content_type(self):
+        self.assertEqual(self._get_ct("/dashboard/css/style.css"), "text/css")
+
+    def test_i18n_json_content_type(self):
+        ct = self._get_ct("/dashboard/i18n/en.json")
+        self.assertTrue(ct.startswith("application/json"), ct)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

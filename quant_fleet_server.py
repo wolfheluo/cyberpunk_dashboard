@@ -13,7 +13,7 @@ import tempfile
 import time
 import urllib.request
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from init_db import init_db, DB_PATH, INITIAL_CAPITAL
 
 def now_ts(fmt="%H:%M:%S"):
@@ -56,6 +56,7 @@ reload_symbols()
 db_lock = threading.Lock()
 exec_log = []
 log_lock = threading.Lock()
+EXEC_LOG_MAX = 200  # N-4: single cap for warn + scan entries
 active_strategy = ""  # no built-in strategy (D3/C-3): user creates one
 _last_signal = {}  # symbol → last signal; decision log only records changes
 
@@ -126,8 +127,8 @@ def _log_warn(msg):
     """Append a warning to the exec log (visible in the dashboard) with a cap."""
     with log_lock:
         exec_log.append({"ts": now_ts(), "html": f'<span style="color:#FFCC00">[warn]</span> {msg}'})
-        if len(exec_log) > 300:
-            del exec_log[:100]
+        if len(exec_log) > EXEC_LOG_MAX:
+            del exec_log[:EXEC_LOG_MAX // 2]
 
 def run_js_strategy(strategy_file, ticker_infos):
     """Evaluate a JS strategy for all tickers via a node subprocess.
@@ -744,7 +745,7 @@ def fetch_all_data():
         last_rec = get_db().execute("SELECT MAX(recorded_at) FROM prices").fetchone()[0]
         # D8/M-2: compare against the same base the INSERT writes (UTC).
         # The old mix (stored UTC+8 vs datetime.now() UTC) never throttled.
-        should_record = not last_rec or (datetime.utcnow() - datetime.fromisoformat(last_rec)).total_seconds() > 300
+        should_record = not last_rec or (datetime.now(timezone.utc).replace(tzinfo=None) - datetime.fromisoformat(last_rec)).total_seconds() > 300
 
     # Portfolio snapshot for strategy params (position + available cash + equity)
     with db_lock:
@@ -962,7 +963,7 @@ def fetch_all_data():
             "portfolio": info["ticker"]["portfolio"],
             "sparkline": sparkline,
             "_rsi": round(info["indicators"]["rsi"], 1),
-            "_sma4h": round(info["indicators"].get("sma_4h") or info["indicators"]["sma20"], price < 1 and 4 or 2),
+            "_sma4h": round(info["indicators"].get("sma_4h") or info["indicators"]["sma20"], 4 if price < 1 else 2),  # N-13
             "_vol_surge": info["indicators"]["volSurge"]
         })
 
@@ -990,10 +991,10 @@ def fetch_all_data():
 
     with log_lock:
         for e in result["exec_log"]: exec_log.append(e)
-        while len(exec_log)>200: exec_log.pop(0)
+        while len(exec_log) > EXEC_LOG_MAX: exec_log.pop(0)
 
     # ---- KPI / Factors ----
-    strategy_metas = list_js_strategies()[:4]
+    strategy_metas = list_js_strategies()  # N-5: all strategies, not [:4]
     strategy_names = [s["name"] for s in strategy_metas]
     timeframes_list = ["15m","1h","4h","1d"]
     cells=[]
@@ -1025,7 +1026,7 @@ def fetch_all_data():
     kpi = {
         "sharpe": sharpe,
         "win_rate": round(win_rate, 1) if win_rate is not None else None,
-        "pnl_day": round(pnl, 0),
+        "pnl_total": round(pnl, 0),  # N-6: it's total P&L, not day P&L
         "max_drawdown": max_dd,
         "aum": round(total_equity, 0)
     }
@@ -1091,7 +1092,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             rel = self.path[len("/dashboard/"):]
             fpath = _safe_static_path(os.path.join(_BASE, "dashboard"), rel)
             if fpath and fpath.endswith((".html", ".js", ".css", ".json")) and os.path.isfile(fpath):
-                ct = "text/css" if fpath.endswith(".css") else "application/javascript" if fpath.endswith(".js") else "text/plain"
+                ct = ("text/css" if fpath.endswith(".css") else
+                      "application/javascript" if fpath.endswith(".js") else
+                      "application/json" if fpath.endswith(".json") else
+                      "text/html" if fpath.endswith(".html") else "text/plain")  # N-7
                 with open(fpath, "rb") as f: content = f.read()
                 self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length", str(len(content))); self.end_headers()
                 if self.command != "HEAD": self.wfile.write(content)
