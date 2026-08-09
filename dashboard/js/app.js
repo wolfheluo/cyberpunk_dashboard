@@ -30,10 +30,11 @@ var strategiesList=[],activeStratFile='',editingFile='';
 // ============================================================
 // STRATEGY LOADER
 // ============================================================
-function loadStrategies(){
+function loadStrategies(cb){
   fetch('/api/strategies').then(function(r){return r.json();}).then(function(d){
     strategiesList=d.strategies;activeStratFile=d.active;loadActiveJSStrategy();
     var as=document.getElementById('acctStrategySelect');if(as){as.innerHTML='<option value="">No strategy selected</option>';for(var j=0;j<strategiesList.length;j++){var ss=strategiesList[j];as.innerHTML+='<option value="'+ss.filename+'"'+(ss.filename===d.active?' selected':'')+'>'+ss.name+'</option>';}}
+    if(cb)cb();
   });
 }
 function activateStrategy(fname){
@@ -79,7 +80,7 @@ function confirmCreateStrategy(){
   fetch('/api/strategy/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:name})})
     .then(function(r){return r.json();}).then(function(d){
       if(d.error){alert(d.error);return;}
-      loadStrategies();loadStrategyList();openStrategy(d.filename);
+      loadStrategies(function(){loadStrategyList();openStrategy(d.filename);});
     });
 }
 document.getElementById('stratNameInput').addEventListener('keydown',function(e){
@@ -90,8 +91,10 @@ function deleteStrategy(fname){
   if(fname===activeStratFile){alert('Cannot delete active strategy. Switch first.');return;}
   if(!confirm('Delete '+fname+'?'))return;
   fetch('/api/strategy/'+fname+'/delete',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
-    loadStrategies();loadStrategyList();
-    if(editingFile===fname){document.getElementById('codeEditor').value='';document.getElementById('codeEditor').disabled=true;document.getElementById('btnSave').disabled=true;document.getElementById('editorTitle').textContent='Select a strategy';editingFile='';}
+    loadStrategies(function(){
+      loadStrategyList();
+      if(editingFile===fname){document.getElementById('codeEditor').value='';document.getElementById('codeEditor').disabled=true;document.getElementById('btnSave').disabled=true;document.getElementById('editorTitle').textContent='Select a strategy';editingFile='';}
+    });
   });
 }
 function saveStrategy(){
@@ -102,7 +105,7 @@ function saveStrategy(){
       document.getElementById('editorStatus').textContent=d.error?'ERROR: '+d.error:'Saved — '+d.name;
       document.getElementById('editorStatus').style.color=d.error?'#FF2A6D':'#00FF66';
       if(!d.error){
-        loadStrategies();
+        loadStrategies(function(){loadStrategyList();});
         // Hot-reload: re-eval all tickers with new strategy
         if(editingFile===activeStratFile){
           eval('activeJSStrategy='+code.replace(/\\n/g,'\\n'));
