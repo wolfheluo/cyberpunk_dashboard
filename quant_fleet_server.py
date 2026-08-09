@@ -1053,7 +1053,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif self.path=="/api/trade/simulate":
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
             sym=body.get("symbol",""); side=body.get("side","BUY"); price=body.get("price",0)
-            if not sym: self._json(400,{"error":"symbol required"}); return
+            # M-5: validate before touching the account — was: any symbol/side/price
+            # could inject fake trades (unauthenticated, LAN-reachable).
+            if sym not in SYMBOLS:
+                self._json(400,{"error":"symbol not in watchlist"}); return
+            if side not in ("BUY","SELL"):
+                self._json(400,{"error":"side must be BUY or SELL"}); return
+            try: price = float(price)
+            except (TypeError, ValueError):
+                self._json(400,{"error":"price must be a number > 0"}); return
+            if price <= 0:
+                self._json(400,{"error":"price must be > 0"}); return
             r = execute_trade(sym,side,price,body.get("strategy","manual"))
             self._json(200,r if r else {"error":"Insufficient funds or no position"})
         elif self.path=="/api/reset":

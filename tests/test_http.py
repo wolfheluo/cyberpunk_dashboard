@@ -156,5 +156,45 @@ class SymbolValidationTests(unittest.TestCase):
         self.assertEqual(st, 200, body)
 
 
+class SimulateValidationTests(unittest.TestCase):
+    """M-5: /api/trade/simulate must reject invalid symbol/side/price.
+
+    Was: any symbol (not in watchlist), any side (falls through to opening a
+    short), any price — unauthenticated fake-trade injection into account stats.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.stop()
+
+    def _sim(self, payload):
+        return self.srv.request("POST", "/api/trade/simulate",
+                                json.dumps(payload).encode())
+
+    def test_symbol_not_in_watchlist_rejected(self):
+        st, body = self._sim({"symbol": "NOPEUSDT", "side": "BUY", "price": 1.0})
+        self.assertEqual(st, 400, body)
+
+    def test_invalid_side_rejected(self):
+        st, body = self._sim({"symbol": "BTCUSDT", "side": "HOLD", "price": 1.0})
+        self.assertEqual(st, 400, body)
+
+    def test_zero_price_rejected(self):
+        st, body = self._sim({"symbol": "BTCUSDT", "side": "BUY", "price": 0})
+        self.assertEqual(st, 400, body)
+
+    def test_negative_price_rejected(self):
+        st, body = self._sim({"symbol": "BTCUSDT", "side": "SELL", "price": -5})
+        self.assertEqual(st, 400, body)
+
+    def test_legit_simulate_still_works(self):
+        st, body = self._sim({"symbol": "BTCUSDT", "side": "BUY", "price": 100.0})
+        self.assertEqual(st, 200, body)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

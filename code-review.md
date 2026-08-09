@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 5 | C-1, C-2, M-6, M-7, N-15 |
-| ⏳ 未修補（spec 已規劃未執行） | 44 | C-4, C-5, M-1, M-2, M-4, M-5, M-8 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 6 | C-1, C-2, M-5, M-6, M-7, N-15 |
+| ⏳ 未修補（spec 已規劃未執行） | 43 | C-4, C-5, M-1, M-2, M-4, M-8 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -110,7 +110,7 @@
 **修復**：改 ThreadingHTTPServer（db_lock/log_lock 已就緒）
 
 ### M-5. /api/trade/simulate 無輸入驗證
-**修補狀態**：⏳ **未修補** — 2026-08-09 實測：POST /api/trade/simulate `{"symbol":"TESTXUSDT","side":"BUY","price":1.0,"quantity":1}` → `{"status":"filled","trade_id":998,...}` 開倉成功（無 watchlist/side/price 驗證；測試資料已清理）；spec 無對應 D 項，需補驗證或移除端點
+**修補狀態**：✅ **已修補**（2026-08-09）— tests/test_http.py SimulateValidationTests 5/5 綠：symbol 不在 watchlist → 400、side ∉ {BUY,SELL} → 400、price ≤ 0/非數字 → 400（原本 NOPEUSDT 可開倉、HOLD 落入 else 開空）；合法 simulate 仍 200
 
 **檔案**：`quant_fleet_server.py` 第 1038 行
 **問題**：symbol 不檢查 watchlist（TESTFAKE 可開倉）、price 任意、side 任意值落入 else 開空
