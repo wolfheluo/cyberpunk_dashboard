@@ -413,7 +413,7 @@ def rebuild_cycles():
     for p in cycles:
         open_avg = p["open_cost_total"] / p["open_qty_total"] if p["open_qty_total"] else 0
         close_avg = p["close_value"] / p["close_qty"] if p["close_qty"] else None
-        cur = cur_price.get(sym)
+        cur = cur_price.get(p["symbol"])
         if p["remaining"] > 0.00001 and cur:
             if p["side"] == "BUY":
                 unrealized = (cur - open_avg) * p["remaining"]
