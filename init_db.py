@@ -5,7 +5,8 @@ import os, csv, io, zipfile, urllib.request, time, sqlite3
 from datetime import datetime, timezone
 
 _BASE = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else os.getcwd()
-DB_PATH = os.path.join(_BASE, "quant_fleet.db")
+# QF_DB_PATH override: test seam — isolated DB for the HTTP test harness
+DB_PATH = os.environ.get("QF_DB_PATH", os.path.join(_BASE, "quant_fleet.db"))
 INITIAL_CAPITAL = 10_000.0
 DEFAULT_SYMBOLS = [("BTCUSDT","Bitcoin"),("ETHUSDT","Ethereum"),("BNBUSDT","BNB"),
                    ("SOLUSDT","Solana"),("ADAUSDT","Cardano"),("HYPERUSDT","Hyperliquid"),("LINKUSDT","Chainlink")]

@@ -9,7 +9,7 @@
 
 **驗證方式**：git 歷史比對（最新 code commit `4ec858a` 早於審計；working tree 乾淨，無未提交修補）+ 源碼逐項核對 + 實測（本專案 server 運行於 `0.0.0.0:8899`；8080 上的 React app 為另一專案，非本次目標）。
 
-**結論**：**55 項中 0 項已修補**。修補藍圖 `spec/remediation.md`（commit `dd26637`，ready-for-agent）已發布，但程式碼修補尚未開始執行。
+**結論**：**55 項中原 0 項已修補 → 修補進行中**（截至 2026-08-09：✅ 2 項完成，53 項待修）。修補藍圖 `spec/remediation.md`（commit `dd26637`，ready-for-agent）為執行依據；修補以 TDD 進行（tests/ 目錄，HTTP/node seam），每批完成後在本文件標記 ✅ 並 commit。
 
 **實測證據（2026-08-09）**：
 - C-1/C-2 路徑穿越 **仍可下載完整 950,272B 交易 DB**（`--path-as-is /dashboard/../quant_fleet.db`、`/i18n/../../quant_fleet.db` → 200，SQLite magic bytes 確認）
@@ -18,7 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ⏳ 未修補（spec 已規劃未執行） | 49 | C-1, C-2, C-4, C-5, M-1, M-2, M-4 ~ M-10, N-1 ~ N-20, N-22 ~ N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 2 | C-1, C-2 |
+| ⏳ 未修補（spec 已規劃未執行） | 47 | C-4, C-5, M-1, M-2, M-4 ~ M-10, N-1 ~ N-20, N-22 ~ N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -31,7 +32,7 @@
 ## 🔴 Critical（安全漏洞 / 資料損壞 / 平台故障）
 
 ### C-1. 路徑穿越 — `/dashboard/` 靜態路由任意檔案讀取
-**修補狀態**：⏳ **未修補**（Critical 仍存在）— 2026-08-09 實測（server 0.0.0.0:8899）：`curl --path-as-is /dashboard/../quant_fleet.db` → 200 + 950,272B（SQLite magic bytes 確認完整交易 DB）；spec D1 已規劃 realpath 邊界檢查 + 副檔名白名單，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D1）— tests/test_http.py TraversalTests 6/6 綠：4 組 traversal payload（`/dashboard/../quant_fleet.db`、`/dashboard/../../../etc/passwd`、`/i18n/../../quant_fleet.db`、`/dashboard/i18n/../../../../etc/passwd`）全數拒絕且無 SQLite/root 內容；合法靜態檔（app.js/style.css/en.json/zh.json）正常 200；實作 `_safe_static_path`（realpath 邊界檢查）+ `/dashboard/` 副檔名白名單（.html/.js/.css/.json）
 
 **檔案**：`quant_fleet_server.py` 第 941 行
 **問題**：`fpath = os.path.join(_BASE, self.path.lstrip('/'))` 無正規化/邊界檢查
@@ -40,7 +41,7 @@
 **修復**：realpath 後檢查必須位於 `_BASE` 之下（prefix 比對）
 
 ### C-2. 路徑穿越 — `/i18n/` 路由任意檔案讀取
-**修補狀態**：⏳ **未修補** — 實測 `curl --path-as-is /i18n/../../quant_fleet.db` → 200 + 950KB DB（同 C-1）；spec D1 已規劃 fname 白名單，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D1）— 同上測試：`/i18n/../../quant_fleet.db` 與 `/dashboard/i18n/../../../../etc/passwd` 全數拒絕；`/i18n/` 路由同樣經 `_safe_static_path` 限制於 i18n 目錄內
 
 **檔案**：`quant_fleet_server.py` 第 935 行
 **問題**：`fname` 無驗證直接 `os.path.join(_BASE, 'dashboard', 'i18n', fname)`

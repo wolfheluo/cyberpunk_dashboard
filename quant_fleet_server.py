@@ -66,6 +66,22 @@ def _safe_strategy_name(fname):
         raise ValueError("Invalid strategy name")
     return base
 
+def _safe_static_path(base, rel):
+    """Join `rel` under `base`; return None if the resolved path escapes base.
+
+    Traversal guard (D1): realpath both sides and require the result to stay
+    inside base. A path like /dashboard/../quant_fleet.db resolves outside the
+    dashboard dir and is rejected before any open() call.
+    """
+    try:
+        base_real = os.path.realpath(base)
+        full = os.path.realpath(os.path.join(base, rel))
+    except (ValueError, OSError):
+        return None
+    if full != base_real and not full.startswith(base_real + os.sep):
+        return None
+    return full
+
 def _strategy_meta(content):
     """Extract NAME/DESCRIPTION from a JS strategy file (object-literal style)."""
     name_m = re.search(r'NAME\s*[:=]\s*"([^"]+)"', content)
@@ -932,14 +948,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200, {"symbols":[{"id":r[0],"symbol":r[1],"name":r[2]} for r in rows]})
         elif self.path.startswith("/dashboard/i18n/") or self.path.startswith("/i18n/"):
             fname = self.path.replace("/dashboard/i18n/", "").replace("/i18n/", "")
-            path = os.path.join(_BASE, "dashboard", "i18n", fname)
-            if os.path.isfile(path):
+            path = _safe_static_path(os.path.join(_BASE, "dashboard", "i18n"), fname)
+            if path and os.path.isfile(path):
                 with open(path, "rb") as f: content = f.read()
                 self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
             else: self.send_error(404)
         elif self.path.startswith("/dashboard/"):
-            fpath = os.path.join(_BASE, self.path.lstrip("/"))
-            if os.path.isfile(fpath):
+            rel = self.path[len("/dashboard/"):]
+            fpath = _safe_static_path(os.path.join(_BASE, "dashboard"), rel)
+            if fpath and fpath.endswith((".html", ".js", ".css", ".json")) and os.path.isfile(fpath):
                 ct = "text/css" if fpath.endswith(".css") else "application/javascript" if fpath.endswith(".js") else "text/plain"
                 with open(fpath, "rb") as f: content = f.read()
                 self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
@@ -1154,7 +1171,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self,f,*a): pass
 
 def main():
-    port=8899
+    # QF_PORT override: test seam — the HTTP test harness runs an isolated instance
+    port = int(os.environ.get("QF_PORT", 8899))
     print(f"Quant Fleet on http://localhost:{port}")
     print(f"Initial capital: ${INITIAL_CAPITAL:,.0f}")
     if HAS_NODE:
