@@ -24,7 +24,7 @@
   "wait_signals": "WAIT",
   "hold_signals": "HOLD",
   "paper_trading": "PAPER TRADING",
-  "exec_log_title": "// EXECUTION LOG",
+  "exec_log_title": "// DECISION & RESULT LOG",
   "live_badge": "[live]",
   "cli_prompt": "scanning: BTC ETH BNB SOL ADA HYPER LINK",
   "no_data": "No data...",

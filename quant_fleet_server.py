@@ -46,6 +46,7 @@ db_lock = threading.Lock()
 exec_log = []
 log_lock = threading.Lock()
 active_strategy = "default.js"
+_last_signal = {}  # symbol → last signal; decision log only records changes
 
 
 def add_log(ts, msg_type, html):
@@ -564,6 +565,7 @@ def fetch_all_data():
         signals_map = {}
 
     # Pass 2: record signals, auto-execute trades, build ticker rows
+    scan_ts = now_ts()
     for info in ticker_infos:
         sym = info["id"]
         name = info["ticker"]["name"]
@@ -585,6 +587,27 @@ def fetch_all_data():
                     (sym, signal, confidence, price, json.dumps(factors_dict), strategy_name))
                 signal_id = cur.lastrowid
                 db_conn.commit()
+
+        # Decision log: record ONLY signal transitions (HOLD→SELL etc.), never
+        # repeated states — the log should show what changed, not the same
+        # position over and over.
+        prev_sig = _last_signal.get(sym)
+        if prev_sig is None or prev_sig == "WAIT":
+            # First sighting or warm-up WAIT (accumulating) is not a decision.
+            _last_signal[sym] = signal
+        elif signal != prev_sig:
+            _last_signal[sym] = signal
+            rsi = info["indicators"].get("rsi")
+            book = info["ticker"].get("book") or {}
+            obi = book.get("imbalance")
+            detail = f"RSI {rsi}" if rsi is not None else "—"
+            if obi is not None:
+                detail += f", OBI {obi}"
+            sig_color = "#00FF66" if signal == "BUY" else "#FF2A6D" if signal == "SELL" else "#5A6275"
+            result["exec_log"].append({
+                "ts": scan_ts, "type": "info",
+                "html": f'[{scan_ts}] {_esc(sym)} {_esc(prev_sig)}→{_esc(signal)} <span style="color:{sig_color}">({detail}, 信心 {confidence})</span>'
+            })
 
         # Auto-execute trade on BUY/SELL — events drive the pipeline orb:
         #   filled   → exec orb (SIGNAL→RISK→ORDER→FILL→DONE)
@@ -615,10 +638,34 @@ def fetch_all_data():
                      "reason": trade_result.get("reason")}
             if st == "filled":
                 result["executed"].append(event)
+                if current_pos:
+                    if current_pos["side"] == signal:
+                        action = "加倉"
+                    elif signal == "BUY":
+                        action = "回補"
+                    else:
+                        action = "平倉"
+                else:
+                    action = "開倉"
+                rp = trade_result.get("realized_pnl") or 0
+                rp_html = f' <span style="color:#00FF66">已實現 {rp:+.2f}</span>' if rp else ''
+                result["exec_log"].append({
+                    "ts": scan_ts, "type": "info",
+                    "html": f'[{scan_ts}] {_esc(sym)} {signal} {trade_result.get("quantity", 0):.4f} @${price:.2f} <span style="color:#00FF66">已成交·{action}</span> ${trade_result.get("notional", 0):,.2f}{rp_html}'
+                })
             elif st == "rejected":
                 result["rejected"].append(event)
+                reason = "餘額不足" if trade_result.get("reason") == "insufficient_funds" else (trade_result.get("reason") or "未知原因")
+                result["exec_log"].append({
+                    "ts": scan_ts, "type": "info",
+                    "html": f'[{scan_ts}] {_esc(sym)} {signal} <span style="color:#FFCC00">拒絕</span> — {reason}'
+                })
             elif st == "failed":
                 result["failed"].append(event)
+                result["exec_log"].append({
+                    "ts": scan_ts, "type": "info",
+                    "html": f'[{scan_ts}] {_esc(sym)} {signal} <span style="color:#FF2A6D">失敗</span> — 資料庫寫入錯誤'
+                })
 
         sparkline = closes_1h[-18:] if len(closes_1h) >= 18 else closes_1h
         result["tickers"].append({
@@ -633,8 +680,7 @@ def fetch_all_data():
             "_vol_surge": info["indicators"]["volSurge"]
         })
 
-    # ---- Build logs ----
-    ts = now_ts()
+    # ---- Build logs (decision/event lines were recorded during Pass 2) ----
     buys=sells=0
 
     # Re-read positions & trades after execution
@@ -648,15 +694,6 @@ def fetch_all_data():
     for t in result["tickers"]:
         if t["signal"]=="BUY": buys+=1
         elif t["signal"]=="SELL": sells+=1
-        pos = positions_map2.get(t["id"])
-        if t["signal"] in ("BUY","SELL"):
-            color = "#00FF66" if t["signal"]=="BUY" else "#FF2A6D"
-            pos_info = ""
-            if pos: pos_info = f' | POS: {pos["side"]} {pos["qty"]:.4f} @${pos["entry"]:.2f}'
-            result["exec_log"].append({
-                "ts":ts,"type":t["signal"].lower(),
-                "html":f'[{ts}] {_esc(t["id"])} → <span style="color:{color}">{t["signal"]}</span> conf={t["confidence"]}%{pos_info}'
-            })
 
     # Portfolio summary
     pos_value = sum(pos["qty"]*(price_map.get(pos_sym+"USDT",{}).get("price",0) or 0)
@@ -664,13 +701,6 @@ def fetch_all_data():
                     for pos_sym, pos in positions_map2.items())
     total_equity = cash + pos_value
     pnl = total_equity - INITIAL_CAPITAL
-    pnl_color = "#00FF66" if pnl>=0 else "#FF2A6D"
-    pnl_sign = "+" if pnl>=0 else ""
-
-    result["exec_log"].insert(0,{
-        "ts":ts,"type":"info",
-        "html":f'[{ts}] SCAN [{strategy_name}] → BUY:{buys} SELL:{sells} | Cash: ${cash:,.0f} | Equity: ${total_equity:,.0f} | PnL: <span style="color:{pnl_color}">{pnl_sign}${pnl:,.0f}</span>'
-    })
 
     with log_lock:
         for e in result["exec_log"]: exec_log.append(e)
@@ -846,6 +876,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             path = os.path.join(STRATEGIES_DIR, fname)
             if os.path.isfile(path):
                 global active_strategy; active_strategy=fname
+                _last_signal.clear()  # fresh decision log for the new strategy
                 with open(path, encoding="utf-8") as f:
                     name, _ = _strategy_meta(f.read())
                 self._json(200,{"active":fname,"name":name or fname})

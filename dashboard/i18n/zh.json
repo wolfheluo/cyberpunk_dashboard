@@ -24,7 +24,7 @@
   "wait_signals": "觀望",
   "hold_signals": "持有",
   "paper_trading": "模擬交易",
-  "exec_log_title": "// 交易日誌",
+  "exec_log_title": "// 決策與結果日誌",
   "live_badge": "[即時]",
   "cli_prompt": "掃描中: BTC ETH BNB SOL ADA HYPER LINK",
   "no_data": "尚無數據...",
