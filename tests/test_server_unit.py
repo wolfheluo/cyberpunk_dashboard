@@ -135,5 +135,62 @@ class PositionValueTests(unittest.TestCase):
         self.assertEqual(srv._position_value_now(), 200.0)
 
 
+class VolSurgeTests(unittest.TestCase):
+    """T-04 (M-2): vol_surge must compare the LAST 1h kline volume against the
+    previous 10 bars' average — the bug compared the 24h quoteVolume (ticker24)
+    against the 10-bar hourly average, which is ~always true (24h >> 1h)."""
+
+    def setUp(self):
+        srv.active_strategy = ""
+        srv._last_signal = {}
+        srv._ticker24_cache = None
+        srv._ticker24_ts = 0.0
+        srv._klines_cache = {}
+        srv._klines_cache_ts = {}
+        srv._book_cache = None
+        srv._book_cache_ts = 0.0
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("DELETE FROM signals")
+            db.commit()
+        self._saved = (srv.fetch_json, srv.fetch_klines_cached)
+
+    def tearDown(self):
+        srv.fetch_json, srv.fetch_klines_cached = self._saved
+
+    def _vols(self, vols):
+        # 11 bars: first 10 = 1e6 volume, last = vols[-1]
+        base = 1_700_000_000_000
+        klines = [[base + i * 3_600_000, "100", "101", "99", "100", str(v), 0]
+                  for i, v in enumerate(vols)]
+        srv.fetch_klines_cached = lambda symbol, interval, limit=100, ttl=60: klines
+        srv.fetch_json = lambda url: (
+            [{"symbol": "BTCUSDT", "lastPrice": "100", "priceChangePercent": "1",
+              "quoteVolume": "1000000", "highPrice": "101", "lowPrice": "99"}]
+            if "24hr" in url else
+            [{"symbol": "BTCUSDT", "bidPrice": "99.9", "askPrice": "100.1",
+              "bidQty": "1", "askQty": "2"}] if "bookTicker" in url else None)
+        d = srv.fetch_all_data()
+        btc = next(t for t in d["tickers"] if t["id"] == "BTC")
+        return btc["_vol_surge"]
+
+    def test_last_bar_spike_is_surge(self):
+        # last bar 10x the previous average -> true surge
+        self.assertTrue(self._vols([1e6] * 10 + [1e7]))
+
+    def test_flat_volume_is_not_surge(self):
+        # flat 1e6 bars -> no surge (buggy 24h-vs-1h comparison was ~always true)
+        self.assertFalse(self._vols([1e6] * 11))
+
+    def test_insufficient_data_is_not_surge(self):
+        srv.fetch_klines_cached = lambda symbol, interval, limit=100, ttl=60: (
+            [[1_700_000_000_000 + i * 3_600_000, "100", "101", "99", "100", "1000000", 0]
+             for i in range(2)])
+        d = srv.fetch_all_data()
+        self.assertFalse(any(t["_vol_surge"] for t in d["tickers"]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -764,7 +764,18 @@ def fetch_all_data():
             except Exception:
                 pass
 
-        vol_surge = len(closes_1h) >= 2 and volume > (sum(float(k[5]) for k in (klines_1h or [])[-10:]) / max(len(klines_1h[-10:]), 1)) * 1.5
+        # T-04 (M-2): vol_surge = last 1h kline volume > 1.5x the average of
+        # the previous 10 1h klines. The old code compared the 24h quoteVolume
+        # (ticker24) against the 10-bar hourly average — units mismatched, so
+        # the flag was ~always true and the VOLUME factor sat at 1.0.
+        _k = klines_1h or []
+        if len(_k) >= 3:
+            _last_v = float(_k[-1][5])
+            _prev_n = max(len(_k[-11:-1]), 1)
+            _prev_avg = sum(float(x[5]) for x in _k[-11:-1]) / _prev_n
+            vol_surge = _last_v > _prev_avg * 1.5
+        else:
+            vol_surge = False
         macd_line, macd_signal, macd_hist = calc_macd(closes_1h)
         bb_up, bb_mid, bb_low = calc_bollinger(closes_1h)
 
