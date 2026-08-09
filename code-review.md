@@ -12,7 +12,7 @@
 |--------|------|------|
 | 🔴 Critical | 2 | **已修復（T-01, commit `127d4ab`）** |
 | 🟠 Major | 7 | **已修復（T-02~T-08, commits `8493eeb`~`5abe4ec`）** |
-| 🟡 Minor | 14 | 未處理（下一輪） |
+| 🟡 Minor | 14 | **13 已修復（T-A/T-B/T-C, commits `52153ce`~`1f62bac`），N-8 於 T-01 修復** |
 | 🔵 Info | 8 | 未處理（下一輪） |
 
 **驗證環境**：本機 `QF_DB_PATH=/tmp/qf_test.db QF_PORT=8901` 啟動真實 server，以 curl + sqlite 讀回驗證；`py_compile`、`node --check` 全數通過；en/zh i18n 149 keys 完全對齊。
@@ -222,20 +222,20 @@ def _read_json(self):
 
 | ID | 檔案/位置 | 問題 | 建議 |
 |----|-----------|------|------|
-| N-1 | `_run_backtest.js` L236 | 缺 `req.strategy` 檔名 regex 驗證（`_run_strategy.js` L18 有，此處漏）— N-22 defense-in-depth | 加上 `/^[A-Za-z0-9_-]+\.js$/` |
-| N-2 | `_run_backtest.js` L137-199 | 回測缺 live 端 `MIN_CASH`(1000) gate — cash 低於 1000 時 live 拒絕開新倉、回測照開 | 對齊 live 語意 |
-| N-3 | `_run_backtest.js` L142 | cover 時現金不足**靜默跳過**（live 端是 `rejected` event）— 回測/實盤事件語意分歧 | 回測標記 rejected 或至少註記 |
-| N-4 | `quant_fleet_server.py` L120-125 vs L963-965 | `_log_warn` cap 300（刪前 100）與 `fetch_all_data` cap 200（pop 最舊）不一致 | 統一為單一常數 |
-| N-5 | `quant_fleet_server.py` L968 | `strategy_matrix` 只取 `list_js_strategies()[:4]` — 超過 4 個策略時矩陣不完整 | 全量或加 pagination |
-| N-6 | `quant_fleet_server.py` L1000 | `kpi.pnl_day` 實為總損益（`total_equity - INITIAL_CAPITAL`）非當日 — 命名誤導 | 改名 `pnl_total` 或實作日損益 |
-| N-7 | `quant_fleet_server.py` L1052-1055 | static 路由 `.html`/`.json` 被當 `text/plain`（ct 對應只處理 css/js） | `.html` → `text/html`、`.json` → `application/json` |
+| N-1 | `_run_backtest.js` L236 | 缺 `req.strategy` 檔名 regex 驗證（`_run_strategy.js` L18 有，此處漏）— N-22 defense-in-depth | ✅ 已修（T-A, `52153ce`）— 入口加 `/^[A-Za-z0-9_-]+\.js$/`，traversal 到真實策略檔被擋 |
+| N-2 | `_run_backtest.js` L137-199 | 回測缺 live 端 `MIN_CASH`(1000) gate — cash 低於 1000 時 live 拒絕開新倉、回測照開 | ✅ 已修（T-A, `52153ce`）— open/add 加 MIN_CASH gate，手算 4×50% add 耗盡現金後第 5 次 rejected |
+| N-3 | `_run_backtest.js` L142 | cover 時現金不足**靜默跳過**（live 端是 `rejected` event）— 回測/實盤事件語意分歧 | ✅ 已修（T-A, `52153ce`）— 新增 `rejected_count` 計數 |
+| N-4 | `quant_fleet_server.py` L120-125 vs L963-965 | `_log_warn` cap 300（刪前 100）與 `fetch_all_data` cap 200（pop 最舊）不一致 | ✅ 已修（T-B, `3290725`）— `EXEC_LOG_MAX=200` 單一常數 |
+| N-5 | `quant_fleet_server.py` L968 | `strategy_matrix` 只取 `list_js_strategies()[:4]` — 超過 4 個策略時矩陣不完整 | ✅ 已修（T-B, `3290725`）— 全量；6 策略測試驗證 |
+| N-6 | `quant_fleet_server.py` L1000 | `kpi.pnl_day` 實為總損益（`total_equity - INITIAL_CAPITAL`）非當日 — 命名誤導 | ✅ 已修（T-B, `3290725`）— 改名 `pnl_total`，前端 `renderKPIs` 同步 |
+| N-7 | `quant_fleet_server.py` L1052-1055 | static 路由 `.html`/`.json` 被當 `text/plain`（ct 對應只處理 css/js） | ✅ 已修（T-B, `3290725`）— `.html→text/html`、`.json→application/json` |
 | N-8 | `dashboard/js/app.js` L780-783 | `resetAccount()` 無 `.catch` — C-1 修復後仍建議加錯誤提示 | ✅ 已修（T-01, `127d4ab`）— 已加 `.catch` |
-| N-9 | `dashboard/js/app.js` L574 | client hot-reload 傳 `volume_m`（百萬）而 server 傳原始 `volume` — 策略在 client/server 看到的 volume 單位不同 | 統一單位 |
-| N-10 | `dashboard/js/app.js` L222-262 | `Math.min.apply(null, allEq)` 對極大陣列可能 RangeError（目前規模安全） | 迴圈比較 |
-| N-11 | `dashboard/js/app.js` L477-478 | `renderExecLog` 每次 render 強制 scroll 到底 — 使用者無法往上捲讀舊 log | 僅在已貼底時才自動捲 |
-| N-12 | `dashboard/cyberpunk_dashboard.html` L19 | 標題仍寫 "QUANT FLEET v2.5"（skill 記載已 v2.10）— 版本標籤漂移 | 更新或從 config 讀取 |
-| N-13 | `quant_fleet_server.py` L937 | `price < 1 and 4 or 2` 三元短路寫法可讀性差（decimal 位數 hack） | 改 `4 if price < 1 else 2` |
-| N-14 | `quant_fleet_server.py` L722 | `datetime.utcnow()` 在 Python 3.12+ 已 deprecated（僅 warning，功能正常） | 改 `datetime.now(timezone.utc)` |
+| N-9 | `dashboard/js/app.js` L574 | client hot-reload 傳 `volume_m`（百萬）而 server 傳原始 `volume` — 策略在 client/server 看到的 volume 單位不同 | ✅ 已修（T-C, `1f62bac`）— 前端還原 `volume_m*1e6` |
+| N-10 | `dashboard/js/app.js` L222-262 | `Math.min.apply(null, allEq)` 對極大陣列可能 RangeError（目前規模安全） | ✅ 已修（T-C, `1f62bac`）— drawBTCanvas + drawAccountChart 改迴圈比較 |
+| N-11 | `dashboard/js/app.js` L477-478 | `renderExecLog` 每次 render 強制 scroll 到底 — 使用者無法往上捲讀舊 log | ✅ 已修（T-C, `1f62bac`）— `wasPinned` guard |
+| N-12 | `dashboard/cyberpunk_dashboard.html` L19 | 標題仍寫 "QUANT FLEET v2.5"（skill 記載已 v2.10）— 版本標籤漂移 | ✅ 已修（T-C, `1f62bac`）— 移除版本號（git tag 管理） |
+| N-13 | `quant_fleet_server.py` L937 | `price < 1 and 4 or 2` 三元短路寫法可讀性差（decimal 位數 hack） | ✅ 已修（T-B, `3290725`）— `4 if price < 1 else 2` |
+| N-14 | `quant_fleet_server.py` L722 | `datetime.utcnow()` 在 Python 3.12+ 已 deprecated（僅 warning，功能正常） | ✅ 已修（T-B, `3290725`）— `datetime.now(timezone.utc).replace(tzinfo=None)` |
 
 ---
 
@@ -280,7 +280,7 @@ def _read_json(self):
 |--------|------|------|
 | 🔴 Critical | 2 | ✅ 全部修復 |
 | 🟠 Major | 7 | ✅ 全部修復 |
-| 🟡 Minor | 14 | ⏳ 未處理 |
+| 🟡 Minor | 14 | ✅ 全部修復（N-1~N-7, N-9~N-14 via T-A/T-B/T-C；N-8 via T-01） |
 | 🔵 Info | 8 | ⏳ 未處理 |
 
 修復已完成（T-01~T-08, commits `127d4ab` → `5abe4ec`，25 tests 全綠 + live 冒煙測試通過）。
