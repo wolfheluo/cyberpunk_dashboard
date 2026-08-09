@@ -106,7 +106,7 @@ function saveStrategy(){
   var code=document.getElementById('codeEditor').value;
   fetch('/api/strategy/'+editingFile+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code})})
     .then(function(r){return r.json();}).then(function(d){
-      document.getElementById('editorStatus').textContent=d.error?'ERROR: '+d.error:I18n.t('saved')+' — '+d.name;
+      document.getElementById('editorStatus').textContent=d.error?I18n.t('err_prefix')+d.error:I18n.t('saved')+' — '+d.name;
       document.getElementById('editorStatus').style.color=d.error?'#FF2A6D':'#00FF66';
       if(!d.error){
         try{sessionStorage.removeItem('qf_backtest');}catch(e){} // edited code → backtest stale
@@ -121,7 +121,7 @@ function saveStrategy(){
           if(DATA.tickers.length&&currentPage==='dashboard')R(false);
         }
       }
-    }).catch(function(e){document.getElementById('editorStatus').textContent='ERROR: '+e.message;document.getElementById('editorStatus').style.color='#FF2A6D';});
+    }).catch(function(e){document.getElementById('editorStatus').textContent=I18n.t('err_prefix')+e.message;document.getElementById('editorStatus').style.color='#FF2A6D';});
 }
 
 // ============================================================
@@ -185,12 +185,12 @@ function runBacktest(force){
   st.className='text-[15px] text-[#FFCC00] mb-2';
   var start=Date.now();
   fetch('/api/backtest/run',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
-    if(d.error){st.textContent='ERROR: '+d.error;st.className='text-[15px] text-[#FF2A6D] mb-2';return;}
+    if(d.error){st.textContent=I18n.t('err_prefix')+d.error;st.className='text-[15px] text-[#FF2A6D] mb-2';return;}
     btData=d.backtests||[];
     var dur=((Date.now()-start)/1000).toFixed(1);
     try{sessionStorage.setItem('qf_backtest',JSON.stringify({key:key,ts:new Date().toTimeString().slice(0,8),backtests:btData}));}catch(e){}
     renderBacktestResults(I18n.t('done_in')+' '+dur+'s \u2014 '+btData.length+' '+I18n.t('results'),'text-[15px] text-[#00FF66] mb-2');
-  }).catch(function(e){st.textContent='ERROR: '+e.message;st.className='text-[15px] text-[#FF2A6D] mb-2';});
+  }).catch(function(e){st.textContent=I18n.t('err_prefix')+e.message;st.className='text-[15px] text-[#FF2A6D] mb-2';});
 }
 function toggleBTGroup(header){
   var detail=header.nextElementSibling,arrow=header.querySelector('.bt-arrow');
@@ -623,7 +623,7 @@ function loadAccount(){
 
     // Positions
     var posEl=document.getElementById('accountPositions');
-    if(!pos.positions||!pos.positions.length){posEl.innerHTML='<div class="text-[#5A6275] text-[15px]">No open positions</div>';}
+    if(!pos.positions||!pos.positions.length){posEl.innerHTML='<div class="text-[#5A6275] text-[15px]">'+I18n.t('no_positions')+'</div>';}
     else{
       posEl.innerHTML='<table class="bt-table w-full"><thead><tr><th>'+I18n.t('col_symbol')+'</th><th>'+I18n.t('col_side')+'</th><th>'+I18n.t('col_qty')+'</th><th>'+I18n.t('col_entry')+'</th><th>'+I18n.t('col_current')+'</th><th>'+I18n.t('col_pnl')+'</th><th>'+I18n.t('col_strategy')+'</th></tr></thead><tbody>'+
         pos.positions.map(function(p){var pnlCl2=p.unrealized_pnl>=0?'text-[#00FF66]':'text-[#FF2A6D]',pnlSg2=p.unrealized_pnl>=0?'+':'';return '<tr><td class="text-[#00E5FF]">'+p.symbol+'</td><td class="'+(p.side==='BUY'?'text-[#00FF66]':'text-[#FF2A6D]')+'">'+p.side+'</td><td>'+Number(p.quantity).toFixed(4)+'</td><td>$'+Number(p.entry_price).toFixed(2)+'</td><td>$'+(p.current_price?Number(p.current_price).toFixed(2):'--')+'</td><td class="'+pnlCl2+'">'+pnlSg2+'$'+Math.abs(p.unrealized_pnl||0).toFixed(2)+'</td><td class="text-[#5A6275]">'+(p.strategy||'')+'</td></tr>';}).join('')+

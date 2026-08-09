@@ -144,5 +144,6 @@
   "col_open_avg": "平均開倉價",
   "col_close_avg": "平均平倉價",
   "col_unrealized": "未實現損益",
-  "col_realized": "已實現損益"
+  "col_realized": "已實現損益",
+  "err_prefix": "錯誤: "
 }

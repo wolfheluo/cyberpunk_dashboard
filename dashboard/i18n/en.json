@@ -144,5 +144,6 @@
   "col_open_avg": "Avg Open",
   "col_close_avg": "Avg Close",
   "col_unrealized": "Unrealized",
-  "col_realized": "Realized"
+  "col_realized": "Realized",
+  "err_prefix": "ERROR: "
 }
