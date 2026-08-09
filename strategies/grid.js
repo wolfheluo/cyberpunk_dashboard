@@ -1,7 +1,7 @@
 ({
   NAME: "Grid Trading",
-  DESCRIPTION: "網格交易（激進版）：以進場價為中心建立 ±3% 密集網格（每格 0.1%，0.1% 變動即觸發，不防假訊號）。下跌每穿一格買入（遠格倉位遞增：depth d → size = 2%×(1+0.25×(d-1)) cash，上限 6%），上漲每穿一格賣出一份額（部分平倉），低買高賣賺取格差；穿出網格區間停止交易等待回彈，全部格出清後以現價重新建立網格。",
-  GRID_LEVELS: 30,
+  DESCRIPTION: "網格交易（激進版）：以開倉價為中心建立 ±10% 網格（每格 0.1% = 每邊 100 格，0.1% 變動即觸發，不防假訊號）。下跌每穿一格買入（遠格倉位遞增：depth d → size = 2%×(1+0.25×(d-1)) cash，上限 6%），上漲每穿一格賣出一份額（部分平倉），低買高賣賺取格差；穿出網格區間認賠全平後以現價重新建立網格。",
+  GRID_LEVELS: 100,  // ±10% / 0.1% per level
   GRID_STEP_PCT: 0.1,
   BASE_SIZE_PCT: 0.02,   // first lot = 2% of cash
   SIZE_GROWTH: 0.25,     // each deeper level adds +25% of the base lot size
