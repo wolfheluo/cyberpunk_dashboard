@@ -760,3 +760,7 @@ loadAccount=function(){
 
 R();animateRadarPulse();
 connectBinanceWS();I18n.init().then(function(){loadStrategies();loadActiveJSStrategy();R();fetchData();});
+// Browsers throttle background-tab timers (setTimeout → ~1/min), which stalls
+// polling, prices and strategy execution while the tab is hidden. Jump back to
+// the foreground → fetch immediately instead of waiting for the throttled timer.
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&typeof fetchData==='function')fetchData();});
