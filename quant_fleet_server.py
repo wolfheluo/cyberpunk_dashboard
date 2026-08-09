@@ -102,6 +102,11 @@ def list_js_strategies():
         for fname in sorted(os.listdir(STRATEGIES_DIR)):
             if not fname.endswith('.js') or fname.startswith('_'):
                 continue
+            # T-06 (M-5): the LIST route must apply the same whitelist as the
+            # write routes — a maliciously named .js file (e.g. `a".js`) used
+            # to flow unescaped into frontend inline onclick (stored-XSS edge).
+            if not re.fullmatch(r"[A-Za-z0-9_\-]+\.js", fname):
+                continue
             path = os.path.join(STRATEGIES_DIR, fname)
             with open(path, encoding="utf-8") as f:
                 content = f.read()

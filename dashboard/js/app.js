@@ -55,7 +55,7 @@ var strategiesList=[],activeStratFile='',editingFile='';
 function loadStrategies(cb){
   fetch('/api/strategies').then(function(r){return r.json();}).then(function(d){
     strategiesList=d.strategies;activeStratFile=d.active;loadActiveJSStrategy();
-    var as=document.getElementById('acctStrategySelect');if(as){as.innerHTML='<option value="">'+I18n.t('no_strategy')+'</option>';for(var j=0;j<strategiesList.length;j++){var ss=strategiesList[j];as.innerHTML+='<option value="'+ss.filename+'"'+(ss.filename===d.active?' selected':'')+'>'+esc(ss.name)+'</option>';}}
+    var as=document.getElementById('acctStrategySelect');if(as){as.innerHTML='<option value="">'+I18n.t('no_strategy')+'</option>';for(var j=0;j<strategiesList.length;j++){var ss=strategiesList[j];as.innerHTML+='<option value="'+esc(ss.filename)+'"'+(ss.filename===d.active?' selected':'')+'>'+esc(ss.name)+'</option>';}}
     if(cb)cb();
   });
 }
@@ -73,9 +73,9 @@ function loadStrategyList(){
   strategiesList.forEach(function(s){
     var isEditing=s.filename===editingFile; // highlighted = the one being edited
     var isActive=s.filename===activeStratFile; // ACTIVE badge = the one executing
-    el.innerHTML+='<div class="panel p-2 hover:border-[#00E5FF40] cursor-pointer" style="border-color:'+(isEditing?'#00E5FF':'')+'" onclick="openStrategy(\''+s.filename+'\')">'+
+    el.innerHTML+='<div class="panel p-2 hover:border-[#00E5FF40] cursor-pointer" style="border-color:'+(isEditing?'#00E5FF':'')+'" onclick="openStrategy(\''+esc(s.filename)+'\')">'+
       '<div class="flex justify-between items-center"><span class="text-[15px] '+(isEditing?'text-[#00E5FF]':(isActive?'text-[#00FF66]':'text-[#00E5FF]'))+'">'+esc(s.name)+'</span>'+(isActive?'<span class="badge-green">'+I18n.t('badge_active')+'</span>':'')+'</div>'+
-      '<div class="flex justify-between items-center mt-0.5"><div class="text-[15px] text-[#5A6275]">'+esc(s.description)+'</div><button class="btn-sm danger" onclick="event.stopPropagation();deleteStrategy(\''+s.filename+'\')">✕</button></div></div>';
+      '<div class="flex justify-between items-center mt-0.5"><div class="text-[15px] text-[#5A6275]">'+esc(s.description)+'</div><button class="btn-sm danger" onclick="event.stopPropagation();deleteStrategy(\''+esc(s.filename)+'\')">✕</button></div></div>';
   });
   if(!strategiesList.length)el.innerHTML='<div class="text-[#5A6275]">'+I18n.t('no_strategies')+'</div>';
 }

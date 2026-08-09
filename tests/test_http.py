@@ -233,5 +233,41 @@ class BacktestAtrLookaheadTests(unittest.TestCase):
         self.assertGreaterEqual(bt["sell_count"], 1, bt)
 
 
+class StrategyFilenameTests(unittest.TestCase):
+    """T-06 (M-5): list_js_strategies must skip filenames that fail the
+    [A-Za-z0-9_-]+.js whitelist. The write routes already validate; the LIST
+    route did not — a maliciously named .js file dropped into strategies/
+    flowed unescaped into frontend inline onclick (stored-XSS edge)."""
+
+    WEIRD_NAME = 'a".js'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+        cls.strategies_dir = os.path.join(ROOT, "strategies")
+        cls.weird_path = os.path.join(cls.strategies_dir, cls.WEIRD_NAME)
+        with open(cls.weird_path, "w", encoding="utf-8") as f:
+            f.write('({ NAME: "Weird", evaluate: function() { return {signal:"HOLD"}; } })\n')
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists(cls.weird_path):
+            os.remove(cls.weird_path)
+        cls.srv.stop()
+
+    def test_weird_filename_not_listed(self):
+        status, body = self.srv.request("GET", "/api/strategies")
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        names = [s["filename"] for s in data["strategies"]]
+        self.assertNotIn(self.WEIRD_NAME, names, names)
+        self.assertIn("grid.js", names)
+
+    def test_weird_filename_cannot_be_activated(self):
+        status, _ = self.srv.request("POST", "/api/strategy/activate",
+                                     json.dumps({"filename": self.WEIRD_NAME}).encode())
+        self.assertEqual(status, 400)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
