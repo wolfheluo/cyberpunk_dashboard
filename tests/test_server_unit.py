@@ -86,5 +86,54 @@ class FakeSeamSmokeTests(unittest.TestCase):
         self.assertIn("BTC", ids)
 
 
+class PositionValueTests(unittest.TestCase):
+    """T-02 (M-1): _position_value_now() must look up live prices by the FULL
+    symbol (USDT suffix). positions.symbol stores 'BTC'; the ticker24 price_map
+    is keyed 'BTCUSDT'. The bug dropped the suffix -> always fell back to
+    entry_price (200 instead of 240 for 2 BTC @ entry 100, price 120)."""
+
+    def setUp(self):
+        srv._ticker24_cache = None
+        srv._ticker24_ts = 0.0
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("DELETE FROM signals")
+            db.execute("UPDATE portfolio SET cash=10000 WHERE id=1")
+            db.execute("INSERT INTO positions (symbol,side,entry_price,quantity,"
+                       "current_price,unrealized_pnl,strategy) "
+                       "VALUES ('BTC','BUY',100,2,120,40,'t')")
+            db.commit()
+        self._saved = srv.fetch_json
+        srv.fetch_json = lambda url: (
+            [{"symbol": "BTCUSDT", "lastPrice": "120", "priceChangePercent": "1",
+              "quoteVolume": "1000000", "highPrice": "121", "lowPrice": "99"}]
+            if "24hr" in url else None)
+
+    def tearDown(self):
+        srv.fetch_json = self._saved
+        srv._ticker24_cache = None
+        srv._ticker24_ts = 0.0
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("DELETE FROM signals")
+            db.execute("UPDATE portfolio SET cash=10000 WHERE id=1")
+            db.commit()
+
+    def test_position_value_uses_live_price(self):
+        # 2 BTC @ live 120 -> 240 (the bug returned 200 = entry-price fallback)
+        self.assertEqual(srv._position_value_now(), 240.0)
+
+    def test_position_value_falls_back_when_ticker_missing(self):
+        srv.fetch_json = lambda url: None  # Binance down -> no prices
+        srv._ticker24_cache = None
+        srv._ticker24_ts = 0.0
+        # no live price -> entry-price fallback (2 * 100 = 200), no crash
+        self.assertEqual(srv._position_value_now(), 200.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

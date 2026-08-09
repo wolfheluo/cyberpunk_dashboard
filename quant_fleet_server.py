@@ -669,7 +669,10 @@ def _position_value_now():
         price_map = {t["symbol"]: float(t["lastPrice"]) for t in raw}
     total = 0.0
     for r in get_db().execute("SELECT symbol,side,entry_price,quantity FROM positions"):
-        px = price_map.get(r[0])
+        # T-02 (M-1): positions.symbol stores the base symbol ('BTC') but
+        # price_map is keyed by the full symbol ('BTCUSDT') — dropping the
+        # suffix made every lookup miss and fall back to the entry price.
+        px = price_map.get(r[0] + "USDT")
         if px is None:
             px = r[2] or 0.0
         total += r[3] * px * (1 if r[1] == "BUY" else -1)
