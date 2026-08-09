@@ -82,6 +82,7 @@ function confirmCreateStrategy(){
   fetch('/api/strategy/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:name})})
     .then(function(r){return r.json();}).then(function(d){
       if(d.error){alert(d.error);return;}
+      try{sessionStorage.removeItem('qf_backtest');}catch(e){} // new strategy → backtest stale
       loadStrategies(function(){loadStrategyList();openStrategy(d.filename);});
     });
 }
@@ -93,6 +94,7 @@ function deleteStrategy(fname){
   if(fname===activeStratFile){alert('Cannot delete active strategy. Switch first.');return;}
   if(!confirm('Delete '+fname+'?'))return;
   fetch('/api/strategy/'+fname+'/delete',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+    try{sessionStorage.removeItem('qf_backtest');}catch(e){} // deleted strategy → backtest stale
     loadStrategies(function(){
       loadStrategyList();
       if(editingFile===fname){document.getElementById('codeEditor').value='';document.getElementById('codeEditor').disabled=true;document.getElementById('btnSave').disabled=true;document.getElementById('editorTitle').textContent='Select a strategy';editingFile='';}
@@ -107,6 +109,7 @@ function saveStrategy(){
       document.getElementById('editorStatus').textContent=d.error?'ERROR: '+d.error:'Saved — '+d.name;
       document.getElementById('editorStatus').style.color=d.error?'#FF2A6D':'#00FF66';
       if(!d.error){
+        try{sessionStorage.removeItem('qf_backtest');}catch(e){} // edited code → backtest stale
         loadStrategies(function(){loadStrategyList();});
         // Hot-reload: re-eval all tickers with new strategy
         if(editingFile===activeStratFile){
@@ -125,7 +128,57 @@ function saveStrategy(){
 // BACKTEST
 // ============================================================
 var btData=[];
+function renderBacktestResults(statusText,statusClass){
+  var st=document.getElementById('backtestStatus');
+  st.textContent=statusText;st.className=statusClass;
+  if(!btData.length){document.getElementById('backtestSummary').innerHTML='<div class="text-[#5A6275] text-[15px]">No results</div>';drawBTCanvas();return;}
+
+  // Group by strategy
+  var groups={},strategyOrder=[];
+  for(var i=0;i<btData.length;i++){
+    var b=btData[i],s=b.strategy;
+    if(!groups[s]){groups[s]=[];strategyOrder.push(s);}
+    groups[s].push(b);
+  }
+  // Sort each group by return desc
+  for(var s in groups){groups[s].sort(function(a,b){return b.total_return_pct-a.total_return_pct;});}
+
+  var el=document.getElementById('backtestSummary');
+  el.innerHTML='';
+  for(var gi=0;gi<strategyOrder.length;gi++){
+    var sn=strategyOrder[gi],items=groups[sn],avgRet=0,minRet=Infinity,maxRet=-Infinity;
+    for(var j=0;j<items.length;j++){avgRet+=items[j].total_return_pct;if(items[j].total_return_pct<minRet)minRet=items[j].total_return_pct;if(items[j].total_return_pct>maxRet)maxRet=items[j].total_return_pct;}
+    avgRet/=items.length;
+    var aCls=avgRet>=0?'up':'down',aSgn=avgRet>=0?'+':'',mCls=maxRet>=0?'text-[#00FF66]':'text-[#FF2A6D]',mnCls=minRet>=0?'text-[#00FF66]':'text-[#FF2A6D]';
+
+    var div=document.createElement('div');div.className='panel mb-1';
+    var avgEq=0;for(var j=0;j<items.length;j++)avgEq+=items[j].final_equity;avgEq/=items.length;
+    var eCls=avgEq>=10000?'text-[#00FF66]':'text-[#FF2A6D]',eSgn=avgEq>=10000?'+':'';
+    div.innerHTML='<div class="flex items-center justify-between p-2 cursor-pointer hover:bg-[#0F1117]" onclick="toggleBTGroup(this)" style="user-select:none">'+
+      '<span class="bt-arrow">\u25b6</span> <span class="text-[#00E5FF] text-[15px]">'+sn+'</span>'+
+      '<span class="text-[15px]"><span class="'+aCls+'">Avg: '+aSgn+avgRet.toFixed(1)+'%</span> <span class="text-[#5A6275]">|</span> <span class="'+eCls+'">$'+avgEq.toFixed(0)+'</span> <span class="text-[#5A6275]">|</span> Best: <span class="'+mCls+'">'+items[0].symbol+' '+(items[0].total_return_pct>=0?'+':'')+items[0].total_return_pct.toFixed(1)+'%</span> <span class="text-[#5A6275]">|</span> '+items.length+' symbols</span></div>'+
+      '<div class="hidden bt-detail p-3"><div class="text-[#00E5FF] text-[15px] mb-2">'+sn+' — '+items.length+' symbols, $10,000 initial</div><table class="bt-table w-full">'+
+      '<thead><tr><th class="w-24">Symbol</th><th class="w-20">Return</th><th class="w-28">Final Equity</th><th class="w-24">Trades</th><th>vs $10k</th></tr></thead><tbody>'+
+      items.map(function(b){var cl=b.total_return_pct>=0?'up':'down',sn=b.total_return_pct>=0?'+':'',barW=Math.min(100,Math.abs(b.total_return_pct)*3),barCl=b.total_return_pct>=0?'#00E5FF':'#FF2A6D';return '<tr><td class="text-[#00E5FF]">'+b.symbol+'</td><td class="'+cl+'">'+sn+b.total_return_pct+'%</td><td>$'+b.final_equity.toLocaleString()+'</td><td class="text-[#5A6275]">'+b.trades_count+'</td><td><span style="display:inline-block;background:'+barCl+'20;height:6px;width:'+barW+'px;border-radius:3px"></span></td></tr>';}).join('')+
+      '</tbody></table></div>';
+    el.appendChild(div);
+  }
+  drawBTCanvas();
+}
+function btCacheKey(){return strategiesList.map(function(s){return s.filename;}).sort().join(',');}
 function runBacktest(){
+  var key=btCacheKey();
+
+  // Cached results? Reuse them — recompute only after the page is closed
+  // (sessionStorage) or when strategies changed since the last run.
+  var cache=null;
+  try{cache=JSON.parse(sessionStorage.getItem('qf_backtest')||'null');}catch(e){}
+  if(cache&&cache.key===key&&cache.backtests&&cache.backtests.length){
+    btData=cache.backtests;
+    renderBacktestResults('CACHED '+cache.ts+' \u2014 '+btData.length+' '+I18n.t('results'),'text-[15px] text-[#00E5FF] mb-2');
+    return;
+  }
+
   var st=document.getElementById('backtestStatus');
   st.textContent=I18n.t('computing');
   st.className='text-[15px] text-[#FFCC00] mb-2';
@@ -134,40 +187,8 @@ function runBacktest(){
     if(d.error){st.textContent='ERROR: '+d.error;st.className='text-[15px] text-[#FF2A6D] mb-2';return;}
     btData=d.backtests||[];
     var dur=((Date.now()-start)/1000).toFixed(1);
-    st.textContent=I18n.t('done_in')+' '+dur+'s \u2014 '+btData.length+' '+I18n.t('results');
-    st.className='text-[15px] text-[#00FF66] mb-2';
-
-    // Group by strategy
-    var groups={},strategyOrder=[];
-    for(var i=0;i<btData.length;i++){
-      var b=btData[i],s=b.strategy;
-      if(!groups[s]){groups[s]=[];strategyOrder.push(s);}
-      groups[s].push(b);
-    }
-    // Sort each group by return desc
-    for(var s in groups){groups[s].sort(function(a,b){return b.total_return_pct-a.total_return_pct;});}
-
-    var el=document.getElementById('backtestSummary');
-    el.innerHTML='';
-    for(var gi=0;gi<strategyOrder.length;gi++){
-      var sn=strategyOrder[gi],items=groups[sn],avgRet=0,minRet=Infinity,maxRet=-Infinity;
-      for(var j=0;j<items.length;j++){avgRet+=items[j].total_return_pct;if(items[j].total_return_pct<minRet)minRet=items[j].total_return_pct;if(items[j].total_return_pct>maxRet)maxRet=items[j].total_return_pct;}
-      avgRet/=items.length;
-      var aCls=avgRet>=0?'up':'down',aSgn=avgRet>=0?'+':'',mCls=maxRet>=0?'text-[#00FF66]':'text-[#FF2A6D]',mnCls=minRet>=0?'text-[#00FF66]':'text-[#FF2A6D]';
-
-      var div=document.createElement('div');div.className='panel mb-1';
-      var avgEq=0;for(var j=0;j<items.length;j++)avgEq+=items[j].final_equity;avgEq/=items.length;
-      var eCls=avgEq>=10000?'text-[#00FF66]':'text-[#FF2A6D]',eSgn=avgEq>=10000?'+':'';
-      div.innerHTML='<div class="flex items-center justify-between p-2 cursor-pointer hover:bg-[#0F1117]" onclick="toggleBTGroup(this)" style="user-select:none">'+
-        '<span class="bt-arrow">\u25b6</span> <span class="text-[#00E5FF] text-[15px]">'+sn+'</span>'+
-        '<span class="text-[15px]"><span class="'+aCls+'">Avg: '+aSgn+avgRet.toFixed(1)+'%</span> <span class="text-[#5A6275]">|</span> <span class="'+eCls+'">$'+avgEq.toFixed(0)+'</span> <span class="text-[#5A6275]">|</span> Best: <span class="'+mCls+'">'+items[0].symbol+' '+(items[0].total_return_pct>=0?'+':'')+items[0].total_return_pct.toFixed(1)+'%</span> <span class="text-[#5A6275]">|</span> '+items.length+' symbols</span></div>'+
-        '<div class="hidden bt-detail p-3"><div class="text-[#00E5FF] text-[15px] mb-2">'+sn+' — '+items.length+' symbols, $10,000 initial</div><table class="bt-table w-full">'+
-        '<thead><tr><th class="w-24">Symbol</th><th class="w-20">Return</th><th class="w-28">Final Equity</th><th class="w-24">Trades</th><th>vs $10k</th></tr></thead><tbody>'+
-        items.map(function(b){var cl=b.total_return_pct>=0?'up':'down',sn=b.total_return_pct>=0?'+':'',barW=Math.min(100,Math.abs(b.total_return_pct)*3),barCl=b.total_return_pct>=0?'#00E5FF':'#FF2A6D';return '<tr><td class="text-[#00E5FF]">'+b.symbol+'</td><td class="'+cl+'">'+sn+b.total_return_pct+'%</td><td>$'+b.final_equity.toLocaleString()+'</td><td class="text-[#5A6275]">'+b.trades_count+'</td><td><span style="display:inline-block;background:'+barCl+'20;height:6px;width:'+barW+'px;border-radius:3px"></span></td></tr>';}).join('')+
-        '</tbody></table></div>';
-      el.appendChild(div);
-    }
-    drawBTCanvas();
+    try{sessionStorage.setItem('qf_backtest',JSON.stringify({key:key,ts:new Date().toTimeString().slice(0,8),backtests:btData}));}catch(e){}
+    renderBacktestResults(I18n.t('done_in')+' '+dur+'s \u2014 '+btData.length+' '+I18n.t('results'),'text-[15px] text-[#00FF66] mb-2');
   }).catch(function(e){st.textContent='ERROR: '+e.message;st.className='text-[15px] text-[#FF2A6D] mb-2';});
 }
 function toggleBTGroup(header){
