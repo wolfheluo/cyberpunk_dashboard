@@ -70,11 +70,13 @@
       factors.action = "grid_sell";
       return { signal: "SELL", confidence: 80, factors: factors, close_pct: closePct };
     }
-    // Price broke through the bottom of the grid → stop buying, wait for a bounce.
+    // Price broke through the bottom of the grid → cut losses, rebuild the grid
+    // at the current price so the strategy keeps trading (aggressive mode —
+    // never sits idle waiting for a bounce).
     if (gridPos < -L) {
-      g.last = price;
-      factors.action = "grid_bottom";
-      return { signal: "HOLD", confidence: 60, factors: factors };
+      this.grids[sym] = null; // rebuilt on the next flat signal
+      factors.action = "grid_stopout";
+      return { signal: "SELL", confidence: 70, factors: factors };
     }
     return { signal: "HOLD", confidence: 50, factors: factors };
   }
