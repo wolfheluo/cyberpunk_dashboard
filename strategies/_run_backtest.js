@@ -80,6 +80,7 @@ function backtestOne(strategy, symbol, klines) {
   let cash = INITIAL_CAPITAL;
   let position = null;
   let tradeCount = 0, buyCount = 0, sellCount = 0;
+  let rejectedCount = 0;  // T-A/N-3: underfunded covers, MIN_CASH gates
 
   for (let i = 0; i < klines.length; i++) {
     const k = klines[i];
@@ -137,9 +138,11 @@ function backtestOne(strategy, symbol, klines) {
     const clampCp = v => Math.min(Math.max(Number(v) || 1.0, 0.01), 1.0);
     const clampSz = v => Math.min(Math.max(Number(v) || TRADE_SIZE_PCT, 0.001), 0.5);
 
+    const MIN_CASH = 1000;  // T-A/N-2: mirror live execute_trade's cash gate
+    const minCashOk = cash >= MIN_CASH;
     if (signal === 'BUY') {
       if (position && position.side === 'SELL') {
-        // Cover short (partial when close_pct < 1; skip if insufficient cash)
+        // Cover short (partial when close_pct < 1)
         const qty = position.qty * clampCp(sig.close_pct);
         const notional = qty * price;
         if (notional <= cash) {
@@ -147,27 +150,33 @@ function backtestOne(strategy, symbol, klines) {
           position.qty -= qty;
           if (position.qty <= 1e-8) position = null;
           tradeCount++; buyCount++;
+        } else {
+          rejectedCount++;  // T-A/N-3: live returns rejected on insufficient cash
         }
       } else if (position && position.side === 'BUY' && sig.add) {
         // Add to long (average cost), same as execute_trade
-        const notional = Math.min(cash * clampSz(sig.size_pct), cash);
-        if (notional >= 10) {
-          const qty = notional / price;
-          cash -= notional;
-          const newQty = position.qty + qty;
-          position.entry = (position.entry * position.qty + price * qty) / newQty;
-          position.qty = newQty;
-          tradeCount++; buyCount++;
-        }
+        if (minCashOk) {
+          const notional = Math.min(cash * clampSz(sig.size_pct), cash);
+          if (notional >= 10) {
+            const qty = notional / price;
+            cash -= notional;
+            const newQty = position.qty + qty;
+            position.entry = (position.entry * position.qty + price * qty) / newQty;
+            position.qty = newQty;
+            tradeCount++; buyCount++;
+          } else { rejectedCount++; }
+        } else { rejectedCount++; }
       } else if (!position) {
         // Open long with size_pct
-        const notional = Math.min(cash * clampSz(sig.size_pct), cash);
-        if (notional >= 10) {
-          const qty = notional / price;
-          cash -= notional;
-          position = {side: 'BUY', qty: qty, entry: price};
-          tradeCount++; buyCount++;
-        }
+        if (minCashOk) {
+          const notional = Math.min(cash * clampSz(sig.size_pct), cash);
+          if (notional >= 10) {
+            const qty = notional / price;
+            cash -= notional;
+            position = {side: 'BUY', qty: qty, entry: price};
+            tradeCount++; buyCount++;
+          } else { rejectedCount++; }
+        } else { rejectedCount++; }
       }
     } else if (signal === 'SELL') {
       if (position && position.side === 'BUY') {
@@ -180,24 +189,28 @@ function backtestOne(strategy, symbol, klines) {
         tradeCount++; sellCount++;
       } else if (position && position.side === 'SELL' && sig.add) {
         // Add to short (average cost)
-        const notional = Math.min(cash * clampSz(sig.size_pct), cash);
-        if (notional >= 10) {
-          const qty = notional / price;
-          cash += notional;
-          const newQty = position.qty + qty;
-          position.entry = (position.entry * position.qty + price * qty) / newQty;
-          position.qty = newQty;
-          tradeCount++; sellCount++;
-        }
+        if (minCashOk) {
+          const notional = Math.min(cash * clampSz(sig.size_pct), cash);
+          if (notional >= 10) {
+            const qty = notional / price;
+            cash += notional;
+            const newQty = position.qty + qty;
+            position.entry = (position.entry * position.qty + price * qty) / newQty;
+            position.qty = newQty;
+            tradeCount++; sellCount++;
+          } else { rejectedCount++; }
+        } else { rejectedCount++; }
       } else if (!position) {
         // Open short with size_pct
-        const notional = Math.min(cash * clampSz(sig.size_pct), cash);
-        if (notional >= 10) {
-          const qty = notional / price;
-          cash += notional;
-          position = {side: 'SELL', qty: qty, entry: price};
-          tradeCount++; sellCount++;
-        }
+        if (minCashOk) {
+          const notional = Math.min(cash * clampSz(sig.size_pct), cash);
+          if (notional >= 10) {
+            const qty = notional / price;
+            cash += notional;
+            position = {side: 'SELL', qty: qty, entry: price};
+            tradeCount++; sellCount++;
+          } else { rejectedCount++; }
+        } else { rejectedCount++; }
       }
     }
     equityCurve.push(cash + (position ? position.qty * price * (position.side === 'SELL' ? -1 : 1) : 0));
@@ -226,6 +239,7 @@ function backtestOne(strategy, symbol, klines) {
     trades_count: tradeCount,
     buy_count: buyCount,
     sell_count: sellCount,
+    rejected_count: rejectedCount,  // T-A/N-3
     equity_curve: sampledEq,
     dates: sampledDates
   };
@@ -236,6 +250,9 @@ process.stdin.on('data', d => { input += d; });
 process.stdin.on('end', () => {
   try {
     const req = JSON.parse(input);
+    // T-A/N-1: mirror _run_strategy.js — defence-in-depth (server already
+    // filters, but a traversal here would read+eval any JS file on disk).
+    if (!/^[A-Za-z0-9_-]+\.js$/.test(req.strategy || '')) throw new Error('invalid strategy filename');
     const code = fs.readFileSync(path.join(__dirname, req.strategy), 'utf-8');
     const strategy = eval(code);
     if (!strategy || typeof strategy.evaluate !== 'function') throw new Error('strategy has no evaluate()');
