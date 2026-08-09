@@ -727,10 +727,20 @@ def fetch_all_data():
     # Pass 1: build ticker + indicators for every watchlist symbol, then evaluate
     # the active JS strategy ONCE via node subprocess (no more hardcoded HOLD).
     book_map = {}
-    bt_raw = fetch_book_cached()  # D11/N-3: TTL-cached, not per-poll
+    bt_raw = fetch_book_cached()  # D11/N-3: TTL-cached (3s), not per-poll
     if bt_raw:
         for b in bt_raw:
             book_map[b["symbol"]] = b
+            # T-05 (M-3): price must be live — the 24hr ticker is 60s cached,
+            # so strategy eval and execution were acting on stale prices while
+            # the frontend showed live WS prices. bookTicker (3s TTL) is
+            # already fetched every poll; use its mid as the execution price.
+            try:
+                bid = float(b["bidPrice"]); ask = float(b["askPrice"])
+                if bid > 0 and ask > 0 and b["symbol"] in price_map:
+                    price_map[b["symbol"]]["price"] = (bid + ask) / 2
+            except (KeyError, TypeError, ValueError):
+                pass
 
     # Portfolio snapshot for strategy params (position + available cash + equity)
     with db_lock:

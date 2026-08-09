@@ -192,5 +192,63 @@ class VolSurgeTests(unittest.TestCase):
         self.assertFalse(any(t["_vol_surge"] for t in d["tickers"]))
 
 
+class LivePriceTests(unittest.TestCase):
+    """T-05 (M-3): strategy/execution price must come from the bookTicker mid
+    (≤3s TTL) instead of the 24hr ticker (60s TTL) — the documented design is
+    'ticker.price is live every poll', but fetch_all_data priced everything
+    from the 60s cache. bookTicker is already fetched per poll; use its mid."""
+
+    def setUp(self):
+        srv.active_strategy = ""
+        srv._last_signal = {}
+        srv._ticker24_cache = None
+        srv._ticker24_ts = 0.0
+        srv._klines_cache = {}
+        srv._klines_cache_ts = {}
+        srv._book_cache = None
+        srv._book_cache_ts = 0.0
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("DELETE FROM signals")
+            db.commit()
+        self._saved = (srv.fetch_json, srv.fetch_klines_cached)
+        srv.fetch_klines_cached = _fake_klines
+
+    def tearDown(self):
+        srv.fetch_json, srv.fetch_klines_cached = self._saved
+
+    def _fetch(self, last_price, bid, ask):
+        def fake(url):
+            if "bookTicker" in url:
+                return [{"symbol": "BTCUSDT", "bidPrice": str(bid), "askPrice": str(ask),
+                         "bidQty": "1", "askQty": "2"}]
+            if "24hr" in url:
+                return [{"symbol": "BTCUSDT", "lastPrice": str(last_price),
+                         "priceChangePercent": "1", "quoteVolume": "1000000",
+                         "highPrice": "101", "lowPrice": "99"}]
+            return None
+        srv.fetch_json = fake
+
+    def _btc_price(self):
+        d = srv.fetch_all_data()
+        return next(t for t in d["tickers"] if t["id"] == "BTC")["price"]
+
+    def test_price_uses_book_mid_not_stale_24hr(self):
+        # 24hr says 100 (60s old), book mid is (99+101)/2 = 100... use wider gap:
+        # 24hr 100 vs book 99.9/100.1 -> mid 100.0, indistinguishable. Use
+        # 24hr=150 vs book 99.9/100.1 -> mid 100.0 — price must be 100.0.
+        self._fetch(last_price=150, bid=99.9, ask=100.1)
+        self.assertEqual(self._btc_price(), 100.0)
+
+    def test_price_falls_back_to_24hr_without_book(self):
+        srv.fetch_json = lambda url: (
+            [{"symbol": "BTCUSDT", "lastPrice": "150", "priceChangePercent": "1",
+              "quoteVolume": "1000000", "highPrice": "151", "lowPrice": "149"}]
+            if "24hr" in url else None)
+        self.assertEqual(self._btc_price(), 150.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
