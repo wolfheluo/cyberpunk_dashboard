@@ -517,8 +517,14 @@ function fetchData(){
       var tc=document.getElementById('tickerCount');if(tc)tc.textContent=DATA.tickers.length;
       var cp=document.getElementById('cliPrompt');if(cp)cp.textContent=I18n.t('cli_scan')+' '+DATA.tickers.map(function(t){return t.id;}).join(' ');
       document.getElementById('statusBar').textContent=I18n.t('updated')+' '+(new Date().toTimeString().slice(0,8))+' | '+latency+'ms';document.getElementById('statusBar').className='text-[#00FF66]';
-      updateRailPrices();
-      spawnOrbsFromData();
+      if(currentPage==='dashboard'){
+        updateRailPrices();
+        spawnOrbsFromData();
+      }else{
+        // Pipeline is paused off-dashboard: drop queued orbs so switching back
+        // doesn't burst-release a backlog of stored orbs.
+        pipeOrbs=[];
+      }
       if(DATA.tickers.length&&currentPage==='dashboard'){
         // First data arrival: full render so the ticker rail gets built (R(false)
         // skips renderTickerRail). Later updates stay surgical to avoid flicker.
