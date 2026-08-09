@@ -229,7 +229,7 @@ def _read_json(self):
 | N-5 | `quant_fleet_server.py` L968 | `strategy_matrix` 只取 `list_js_strategies()[:4]` — 超過 4 個策略時矩陣不完整 | 全量或加 pagination |
 | N-6 | `quant_fleet_server.py` L1000 | `kpi.pnl_day` 實為總損益（`total_equity - INITIAL_CAPITAL`）非當日 — 命名誤導 | 改名 `pnl_total` 或實作日損益 |
 | N-7 | `quant_fleet_server.py` L1052-1055 | static 路由 `.html`/`.json` 被當 `text/plain`（ct 對應只處理 css/js） | `.html` → `text/html`、`.json` → `application/json` |
-| N-8 | `dashboard/js/app.js` L780-783 | `resetAccount()` 無 `.catch` — C-1 修復後仍建議加錯誤提示 | 加 `.catch` 顯示失敗 |
+| N-8 | `dashboard/js/app.js` L780-783 | `resetAccount()` 無 `.catch` — C-1 修復後仍建議加錯誤提示 | ✅ 已修（T-01, `127d4ab`）— 已加 `.catch` |
 | N-9 | `dashboard/js/app.js` L574 | client hot-reload 傳 `volume_m`（百萬）而 server 傳原始 `volume` — 策略在 client/server 看到的 volume 單位不同 | 統一單位 |
 | N-10 | `dashboard/js/app.js` L222-262 | `Math.min.apply(null, allEq)` 對極大陣列可能 RangeError（目前規模安全） | 迴圈比較 |
 | N-11 | `dashboard/js/app.js` L477-478 | `renderExecLog` 每次 render 強制 scroll 到底 — 使用者無法往上捲讀舊 log | 僅在已貼底時才自動捲 |
