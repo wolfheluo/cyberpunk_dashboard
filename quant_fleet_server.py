@@ -16,10 +16,6 @@ import threading
 from datetime import datetime
 from init_db import init_db, DB_PATH, INITIAL_CAPITAL
 
-def _esc(s):
-    """HTML-escape user-controlled strings before embedding in exec_log html."""
-    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
 def now_ts(fmt="%H:%M:%S"):
     return datetime.now().strftime(fmt)
 
@@ -63,11 +59,6 @@ log_lock = threading.Lock()
 active_strategy = ""  # no built-in strategy (D3/C-3): user creates one
 _last_signal = {}  # symbol → last signal; decision log only records changes
 
-
-def add_log(ts, msg_type, html):
-    with log_lock:
-        exec_log.append({"ts":ts,"type":msg_type,"html":html})
-        if len(exec_log)>200: exec_log.pop(0)
 
 # ============================================================
 # JS STRATEGY HELPERS
@@ -330,8 +321,11 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
             if side == "BUY" and pos and pos[0] == "SELL":
                 # ---- Cover short: buy back close_pct of it (partial covers for grids) ----
                 close_pct = min(max(float(close_pct or 1.0), 0.01), 1.0)
-                qty = min(pos[1] * close_pct, cash / price) if price else 0
-                if qty <= 0:
+                # D9/N-1: reject when cash cannot cover the full requested close —
+                # a silent partial fill drifts grid state away from expectations.
+                want_qty = pos[1] * close_pct
+                qty = min(want_qty, cash / price) if price else 0
+                if qty <= 0 or qty < want_qty - 1e-9:
                     return {"status": "rejected", "reason": "insufficient_funds"}
                 notional = qty * price
                 realized = (pos[2] - price) * qty
@@ -776,9 +770,9 @@ def fetch_all_data():
         confidence = sig.get("confidence", 50) or 50
         factors_dict = sig.get("factors") or {}
 
-        # Record signal (skip HOLD rows — otherwise the table grows ~120k rows/day)
+        # Record signal (skip HOLD/WAIT rows — otherwise the table grows ~120k rows/day)
         signal_id = None
-        if signal != "HOLD":
+        if signal not in ("HOLD", "WAIT"):
             with db_lock:
                 cur = get_db().execute(
                     "INSERT INTO signals (symbol,signal,confidence,price,factors_json,strategy) VALUES (?,?,?,?,?,?)",
@@ -1086,6 +1080,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if os.path.isfile(path):
                 global active_strategy; active_strategy=fname
                 _last_signal.clear()  # fresh decision log for the new strategy
+                _strategy_state.pop(fname, None)  # D13/N-5: stale grid state must not leak in
                 with open(path, encoding="utf-8") as f:
                     name, _ = _strategy_meta(f.read())
                 self._json(200,{"active":fname,"name":name or fname})
@@ -1106,8 +1101,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._json(400,{"error":"price must be > 0"}); return
             r = execute_trade(sym,side,price,body.get("strategy","manual"))
             self._json(200,r if r else {"error":"Insufficient funds or no position"})
-        elif self.path=="/api/reset":
-            global _trading_paused_until
             with db_lock:
                 get_db().execute("DELETE FROM trades");
                 get_db().execute("DELETE FROM positions");

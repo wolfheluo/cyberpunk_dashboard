@@ -95,6 +95,10 @@ check('logLine escapes confidence param', /I18n\.t\('log_conf',\{c:esc\(e\.confi
 // pipeline node radius must compare by index, not translated label (zh bug)
 check('pipeline uses index comparison, not label', !/nd\.label==='SIGNAL'/.test(src));
 
+// I-4: no-op replace(/\\n/g) cruft must be gone from the eval call sites
+check('I-4: no no-op newline replace remains', !/replace\(\/\\\\n\/g/.test(src) && !/replace\(\/\\n\/g/.test(src),
+  'found replace(/\\n/g) residue');
+
 // ---- D19 (M-7): I18n.init must RESOLVE even when language files fail to load ----
 // Behavioural test: stub fetch to always reject, boot the I18n module in a vm,
 // and require init() to settle successfully (dashboard boot continues in

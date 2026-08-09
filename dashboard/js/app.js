@@ -132,7 +132,7 @@ function saveStrategy(){
         loadStrategies(function(){loadStrategyList();});
         // Hot-reload: re-eval all tickers with new strategy
         if(editingFile===activeStratFile){
-          eval('activeJSStrategy='+code.replace(/\\n/g,'\\n'));
+          eval('activeJSStrategy='+code);
           for(var i=0;i<DATA.tickers.length;i++){
             var s=evaluateJSStrategy(DATA.tickers[i]);
             DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;
@@ -553,7 +553,7 @@ var activeJSStrategy=null;
 function loadActiveJSStrategy(){
   if(!activeStratFile) return;
   fetch('/api/strategy/'+activeStratFile+'/code').then(function(r){return r.json();}).then(function(d){
-    eval('activeJSStrategy='+d.code.replace(/\n/g,'\n'));
+    eval('activeJSStrategy='+d.code);
   }).catch(function(){});
 }
 function evaluateJSStrategy(ticker){

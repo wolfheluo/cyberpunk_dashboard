@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 16 | C-1, C-2, C-3, C-4, C-5, M-1, M-2, M-4, M-5, M-6, M-7, M-8, M-10, N-9, N-15, N-26 |
-| ⏳ 未修補（spec 已規劃未執行） | 34 | M-9, N-1 ~ N-8, N-10 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 22 | C-1 ~ C-5, M-1, M-2, M-4 ~ M-8, M-10, N-1, N-4, N-5, N-8, N-9, N-15, N-26, I-4, I-12 |
+| ⏳ 未修補（spec 已規劃未執行） | 28 | M-9, N-2, N-3, N-6, N-7, N-10 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-3, I-5 ~ I-8, I-13 |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
 | ✅ 設計維持 | 1 | I-11 |
@@ -161,7 +161,7 @@
 ## 🟡 Minor（程式碼品質 / 邊界 / 效能）
 
 ### N-1. cover short 現金不足時靜默部分回補
-**修補狀態**：⏳ 未修補 — line 280 仍 `qty = min(pos[1]*close_pct, cash/price)` 靜默部分成交；spec D9 已規劃回 rejected，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D9）— CoverCashTests 2/2 綠：現金不足（want 5×$30=150 > cash 100）→ `rejected`（原本靜默部分成交 3.33）；現金足夠仍正常 filled
 
 `quant_fleet_server.py` 第 280 行 — `qty = min(pos[1]*close_pct, cash/price)` 現金不足靜默部分成交且回 filled，無 notional 下限檢查 → grid 狀態與實際倉位漂移。應回 rejected 或明確回報成交 qty。
 
@@ -176,12 +176,12 @@
 `quant_fleet_server.py` 第 620 行 — weight≈4/call × 1s poll ≈ 240/min；多 tab 逼近 1200 上限。加 2-5s TTL。
 
 ### N-4. signals 表唯寫且無限增長
-**修補狀態**：⏳ 未修補 — signals 表仍逐 poll 寫入無清理；spec D12 已規劃 WAIT 不寫 + 容量上限，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D12）— SignalsGrowthTests：WAIT 訊號不再寫入；HOLD/WAIT 皆跳過，僅 BUY/SELL 記錄
 
 `quant_fleet_server.py` 第 726 行 — 1s poll × 7 symbols ≈ 60 萬列/日，全檔只有 INSERT 無 SELECT。WAIT 不寫或定期清理。
 
 ### N-5. _strategy_state 未在 activate 時清除
-**修補狀態**：⏳ 未修補 — activate（line 1030）仍只 `_last_signal.clear()`，無 `_strategy_state.pop`；spec D13 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D13）— activate handler 加 `_strategy_state.pop(fname, None)`；靜態測試驗證
 
 `quant_fleet_server.py` 第 1030 行 — re-activate 帶回舊 state（grid 舊 idx 語意污染新邏輯）。activate 一併 pop。
 
@@ -196,7 +196,7 @@
 `quant_fleet_server.py` 第 883 行 — portfolio_stats/equity_curve/rebuild_cycles 每次 poll 全表重播，O(n)/O(n²)；grid 高頻交易下 trades 快速累積。增量維護或緩存。
 
 ### N-8. 死碼：_esc / add_log / global pause 殘留
-**修補狀態**：⏳ 未修補 — `_esc`（line 17）、`add_log`（line 52）、`global _trading_paused_until`（line 1043）仍在；spec D16 已規劃刪除，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D16）— `_esc`、`add_log`、`global _trading_paused_until` 全數刪除；靜態測試斷言零殘留
 
 `quant_fleet_server.py` 第 17/52/1043 行 — `_esc` 無呼叫點、`add_log` 無呼叫者、`global _trading_paused_until` 指向未定義名字。刪除。
 
@@ -306,7 +306,7 @@
 - **I-3** `<html lang="en">` 固定、title 未地化 — setLang 同步
   - **修補狀態**：⏳ 未修補 — `<html lang="en">` 固定、title 未地化；spec D21 未列明細，需補
 - **I-4** saveStrategy 的 `replace(/\n/g,'\n')` no-op 殘留碼 — 移除
-  - **修補狀態**：⏳ 未修補 — app.js line 127/548 no-op `replace(/\n/g)` 仍在；spec D16 已規劃刪除，未執行
+  - **修補狀態**：✅ 已修補（2026-08-09，spec D16）— 兩處 no-op replace 已移除；frontend 靜態測試含 I-4 斷言
 - **I-5** hasOwnProperty 合併靜默丟 server 新欄位 — 明確欄位映射
   - **修補狀態**：⏳ 未修補 — app.js line 599 hasOwnProperty 合併仍在；spec D21 未列明細，需補
 - **I-6** loadActiveJSStrategy 開機重複 fetch（loadStrategies 內已呼叫）— 移除其一
@@ -322,7 +322,7 @@
 - **I-11** 做空無保證金/強平（紙交易簡化）— 文件標註為設計
   - **修補狀態**：✅ 設計維持 — 紙交易無保證金/強平為既有設計，文件標註即可
 - **I-12** `_esc` 保留但無用 — 與 N-8 同
-  - **修補狀態**：⏳ 未修補 — 同 N-8（`_esc` 仍在）；spec D16 已規劃，未執行
+  - **修補狀態**：✅ 已修補（2026-08-09）— 同 N-8（_esc 已刪除）
 - **I-13** exec_log/DB/kline 三處時間基準混用（UTC / UTC+8 / UTC 日期）— 統一 UTC
   - **修補狀態**：⏳ 未修補 — 三處時間基準混用仍在（line 290/305/321/336/349/608 皆 `datetime('now','+8 hours')`）；spec D8 只涵蓋 prices 節流最小範圍，完整統一 Out of Scope
 

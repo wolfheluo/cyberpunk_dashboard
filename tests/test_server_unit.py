@@ -191,5 +191,80 @@ class PriceThrottleTests(unittest.TestCase):
         self.assertEqual(self._count_prices(), 2, "record older than 5min must be written")
 
 
+class CoverCashTests(unittest.TestCase):
+    """D9 (N-1): cover short with insufficient cash must be rejected,
+    not silently partially filled (which drifts grid state)."""
+
+    def setUp(self):
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("DELETE FROM signals")
+            db.execute("UPDATE portfolio SET cash=100 WHERE id=1")
+            db.execute("INSERT INTO positions (symbol,side,entry_price,quantity,"
+                       "current_price,unrealized_pnl,strategy) "
+                       "VALUES ('BTCUSDT','SELL',100,10,100,0,'t')")
+            db.commit()
+
+    def tearDown(self):
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("DELETE FROM signals")
+            db.execute("UPDATE portfolio SET cash=10000 WHERE id=1")
+            db.commit()
+
+    def test_insufficient_cash_partial_cover_rejected(self):
+        # want 5 * 30 = 150 > cash 100 -> rejected (was: partial 3.33 filled)
+        r = srv.execute_trade("BTCUSDT", "BUY", 30, "t", close_pct=0.5)
+        self.assertEqual(r["status"], "rejected", r)
+
+    def test_sufficient_cash_cover_filled(self):
+        # 5 * 15 = 75 <= 100 -> full requested close still fills
+        r = srv.execute_trade("BTCUSDT", "BUY", 15, "t", close_pct=0.5)
+        self.assertEqual(r["status"], "filled", r)
+
+
+class SignalsGrowthTests(unittest.TestCase):
+    """D12 (N-4): WAIT signals must not be written to the signals table."""
+
+    def setUp(self):
+        srv.active_strategy = "fake.js"
+        srv._last_signal = {}
+        srv.fetch_json = _fake_fetch_json
+        srv.fetch_klines_cached = _fake_klines
+        srv.execute_trade = lambda *a, **k: {"status": "filled"}
+        with srv.db_lock:
+            srv.get_db().execute("DELETE FROM signals")
+            srv.get_db().commit()
+
+    def test_wait_signal_not_written(self):
+        srv.run_js_strategy = lambda *a, **k: {"BTC": {"signal": "WAIT"}}
+        srv.fetch_all_data()
+        with srv.db_lock:
+            n = srv.get_db().execute("SELECT COUNT(*) FROM signals").fetchone()[0]
+        self.assertEqual(n, 0, "WAIT rows must be skipped (was: ~1 row/poll/symbol)")
+
+
+class StaticRemediationTests(unittest.TestCase):
+    """Static seams (spec allows static checks): D13/D16 structural guards."""
+
+    def _server_src(self):
+        with open(os.path.join(ROOT, "quant_fleet_server.py"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_activate_clears_strategy_state(self):
+        src = self._server_src()
+        i = src.index('if self.path=="/api/strategy/activate":')
+        self.assertIn("_strategy_state.pop(fname", src[i:i + 900])
+
+    def test_dead_code_removed(self):
+        src = self._server_src()
+        for token in ("def _esc(", "def add_log(", "_trading_paused_until"):
+            self.assertNotIn(token, src)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
