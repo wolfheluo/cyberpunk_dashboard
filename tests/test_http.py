@@ -6,6 +6,7 @@ requests that preserve the path verbatim (no client-side normalization), so
 traversal payloads reach the server exactly as an attacker would send them.
 """
 import http.client
+import json
 import os
 import socket
 import subprocess
@@ -46,11 +47,16 @@ class ServerHarness:
         self.stop()
         raise RuntimeError("server did not become ready")
 
-    def request(self, method, path):
+    def request(self, method, path, body=None):
         """Raw request — the path is sent verbatim (keeps ../ intact)."""
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         c.putrequest(method, path, skip_accept_encoding=True)
+        if body is not None:
+            c.putheader("Content-Type", "application/json")
+            c.putheader("Content-Length", str(len(body)))
         c.endheaders()
+        if body is not None:
+            c.send(body)
         r = c.getresponse()
         body = r.read()
         c.close()
@@ -108,6 +114,46 @@ class TraversalTests(unittest.TestCase):
                   "/dashboard/i18n/zh.json"):
             st, _ = self.srv.request("GET", p)
             self.assertEqual(st, 200, p)
+
+
+class SymbolValidationTests(unittest.TestCase):
+    """D18: watchlist add must reject HTML-bearing symbol/name (stored-XSS source)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.stop()
+
+    def _add(self, payload):
+        return self.srv.request("POST", "/api/symbols/add",
+                                json.dumps(payload).encode())
+
+    def test_symbol_with_html_rejected(self):
+        st, body = self._add({"symbol": "X<img src=x onerror=alert(1)>USDT", "name": "x"})
+        self.assertEqual(st, 400, body)
+
+    def test_name_with_html_rejected(self):
+        st, body = self._add({"symbol": "DOGEUSDT", "name": "<script>alert(1)</script>"})
+        self.assertEqual(st, 400, body)
+
+    def test_name_with_quotes_rejected(self):
+        st, body = self._add({"symbol": "DOGEUSDT", "name": 'x" onmouseover="alert(1)'})
+        self.assertEqual(st, 400, body)
+
+    def test_symbol_not_usdt_rejected(self):
+        st, body = self._add({"symbol": "DOGE", "name": "Dogecoin"})
+        self.assertEqual(st, 400, body)
+
+    def test_legit_symbol_name_accepted(self):
+        st, body = self._add({"symbol": "DOGEUSDT", "name": "Dogecoin"})
+        self.assertEqual(st, 200, body)
+
+    def test_legit_unicode_name_accepted(self):
+        st, body = self._add({"symbol": "ETHUSDT", "name": "以太坊"})
+        self.assertEqual(st, 200, body)
 
 
 if __name__ == "__main__":

@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 2 | C-1, C-2 |
-| ⏳ 未修補（spec 已規劃未執行） | 47 | C-4, C-5, M-1, M-2, M-4 ~ M-10, N-1 ~ N-20, N-22 ~ N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 4 | C-1, C-2, M-6, N-15 |
+| ⏳ 未修補（spec 已規劃未執行） | 45 | C-4, C-5, M-1, M-2, M-4, M-5, M-7 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -118,7 +118,7 @@
 **修復**：驗證 symbol ∈ watchlist、side ∈ {BUY,SELL}、price>0；或移除端點
 
 ### M-6. 儲存型 XSS 家族（前端）
-**修補狀態**：⏳ **未修補** — app.js line 256 `esc()` 仍只轉 `& < >`，66/169/751 行內插值仍未逸出；spec D18 已規劃（esc 補引號 + 全內插值 + server name 白名單），未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D18）— 前端 tests/test_frontend.js 30/30 綠（esc() 補轉 `"`/`'`；loadStrategyList/renderBacktestResults/loadSymbols（含 data-sym 屬性）/renderRecentTrades/renderPositionsBar/renderSignalTable confidence/logLine 參數/帳戶表格等 22 個內插點全數 esc）；server 端 /api/symbols/add 加 charset 白名單（tests/test_http.py SymbolValidationTests 6/6：HTML/引號 payload → 400、合法 symbol/中文名 → 200）
 
 **檔案**：`dashboard/js/app.js` 第 66/169/751 行
 **問題**：策略 NAME/DESCRIPTION（loadStrategyList）、回測策略名（renderBacktestResults）、watchlist symbol/name（loadSymbols，`data-sym` 屬性可跳出）直接拼 innerHTML；`esc()` 只轉 `& < >` 不轉引號；server 端 watchlist name 完全無驗證
@@ -232,7 +232,7 @@
 `quant_fleet_server.py` 第 71 行 — 單引號字串的策略 meta 提取失敗。regex 改 `['"]`。
 
 ### N-15. 前端多處內插值未逸出（渲染層）
-**修補狀態**：⏳ 未修補 — app.js 286/400/419/432/445 行未逸出與 zh label 比對問題仍在（與 M-6 同源）；spec D18 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D18）— 同上：286/419/432/445 行內插值已 esc；400 行 pipeline 節點改 index（n===0/n===7）比對，zh 標籤失效問題一併解除
 
 `dashboard/js/app.js` 第 286/400/419/432/445 行 — renderRecentTrades 的 symbol/side、renderPositionsBar、renderSignalTable confidence、logLine 參數未過 esc()；pipeline 節點以 label 比對 SIGNAL/DONE 切 zh 後失效（改用 index）。
 

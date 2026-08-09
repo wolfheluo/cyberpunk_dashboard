@@ -1146,8 +1146,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))))
             sym = body.get("symbol","").upper().strip()
             name = body.get("name", sym.replace("USDT",""))
-            if not sym or not sym.endswith("USDT"):
-                self._json(400, {"error":"Symbol must end with USDT (e.g. DOGEUSDT)"}); return
+            # D18: charset allowlist — rejects HTML/attribute-breakout payloads
+            # that would otherwise become stored XSS when rendered unescaped.
+            if not re.fullmatch(r"[A-Z0-9]{1,20}USDT", sym):
+                self._json(400, {"error":"Symbol must be [A-Z0-9]+USDT (e.g. DOGEUSDT)"}); return
+            if (not (1 <= len(name) <= 64) or any(ch in name for ch in '<>"\'&')
+                    or any(ord(ch) < 32 for ch in name)):
+                self._json(400, {"error":"Invalid name — no HTML special characters"}); return
             db_conn.execute("INSERT OR IGNORE INTO watchlist (symbol,name) VALUES (?,?)", (sym,name))
             db_conn.commit(); reload_symbols()
             self._json(200, {"status":"added","symbol":sym,"name":name})
