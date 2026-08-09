@@ -1,9 +1,17 @@
 ({
   NAME: "Grid Trading",
-  DESCRIPTION: "網格交易：以進場價為中心建立 ±12% 網格（每格 2%）。下跌每穿一格買入一份額（5% cash 加倉），上漲每穿一格賣出一份額（部分平倉），低買高賣賺取格差；穿出網格區間停止交易等待回彈，全部格出清後以現價重新建立網格。",
-  GRID_LEVELS: 6,
-  GRID_STEP_PCT: 2.0,
+  DESCRIPTION: "網格交易：以進場價為中心建立 ±10% 密集網格（每格 0.5%）。下跌每穿一格買入（遠格倉位遞增：depth d → size = 1%×(1+0.2×(d-1)) cash），上漲每穿一格賣出一份額（部分平倉），低買高賣賺取格差；穿出網格區間停止交易等待回彈，全部格出清後以現價重新建立網格。",
+  GRID_LEVELS: 20,
+  GRID_STEP_PCT: 0.5,
+  BASE_SIZE_PCT: 0.01,   // first lot = 1% of cash
+  SIZE_GROWTH: 0.2,      // each deeper level adds +20% of the base lot size
+  MAX_SIZE_PCT: 0.05,    // cap the deepest lots at 5% of cash
   grids: {},
+
+  lotSize: function (depth) {
+    // Lot size as fraction of cash for grid level `depth` (1 = first lot below center).
+    return Math.min(this.BASE_SIZE_PCT * (1 + this.SIZE_GROWTH * (depth - 1)), this.MAX_SIZE_PCT);
+  },
 
   evaluate: function (ticker, indicators) {
     var sym = ticker.id, price = ticker.price, pos = ticker.position;
@@ -26,7 +34,8 @@
       if (gp <= -1) {
         this.grids[sym].idx = -1;
         this.grids[sym].last = price;
-        return { signal: "BUY", confidence: 80, factors: { action: "grid_open", grid: -1 } };
+        return { signal: "BUY", confidence: 80, factors: { action: "grid_open", grid: -1 },
+                 size_pct: this.lotSize(1) };
       }
       return { signal: "HOLD", confidence: 50, factors: { action: "grid_wait", grid: gp } };
     }
@@ -51,7 +60,9 @@
     if (gridPos <= buyLevel && buyLevel >= -L && gridPos >= -L) {  // stay inside the grid
       g.idx -= 1; g.last = price;
       factors.action = "grid_buy";
-      return { signal: "BUY", confidence: 80, factors: factors, add: true };
+      // Deeper levels buy larger lots (pyramid): size = base × (1 + growth × (depth-1))
+      return { signal: "BUY", confidence: 80, factors: factors, add: true,
+               size_pct: this.lotSize(-g.idx) };
     }
     var sellLevel = g.idx + 1;  // next sell level above current holding
     if (gridPos >= sellLevel && g.idx < 0) {

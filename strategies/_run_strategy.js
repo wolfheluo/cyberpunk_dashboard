@@ -31,7 +31,8 @@ process.stdin.on('end', () => {
           confidence: typeof out.confidence === 'number' ? out.confidence : 50,
           factors: out.factors || {},
           add: !!out.add,  // strategy requests an add-on to an existing position
-          close_pct: typeof out.close_pct === 'number' ? out.close_pct : 1.0  // partial close ratio
+          close_pct: typeof out.close_pct === 'number' ? out.close_pct : 1.0,  // partial close ratio
+          size_pct: typeof out.size_pct === 'number' ? out.size_pct : null  // lot size as % of cash
         };
       } catch (e) {
         results[t.id] = {signal: 'HOLD', confidence: 50, error: String(e)};

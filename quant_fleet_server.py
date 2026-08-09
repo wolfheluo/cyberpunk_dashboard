@@ -252,7 +252,7 @@ def fetch_klines_cached(symbol, interval, limit=100, ttl=60):
 # ============================================================
 # TRADE EXECUTION
 # ============================================================
-def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=1.0):
+def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=1.0, size_pct=None):
     """Execute a paper trade.
 
     BUY  — opens/adds a long position, or covers an existing short.
@@ -289,10 +289,11 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                     db_conn.execute("UPDATE positions SET quantity=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
                                     (remain, symbol))
             elif side == "BUY":
-                # ---- Open / add long ----
+                # ---- Open / add long (size_pct lets grid strategies scale lot size) ----
                 if cash < MIN_CASH:
                     return {"status": "rejected", "reason": "insufficient_funds"}
-                notional = min(cash * TRADE_SIZE_PCT, cash)
+                size = min(max(float(size_pct or TRADE_SIZE_PCT), 0.001), 0.5)
+                notional = min(cash * size, cash)
                 if notional < 10:
                     return {"status": "rejected", "reason": "insufficient_funds"}
                 qty = notional / price
@@ -322,7 +323,8 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                 # ---- Open / add short ----
                 if cash < MIN_CASH:
                     return {"status": "rejected", "reason": "insufficient_funds"}
-                notional = min(cash * TRADE_SIZE_PCT, cash)
+                size = min(max(float(size_pct or TRADE_SIZE_PCT), 0.001), 0.5)
+                notional = min(cash * size, cash)
                 if notional < 10:
                     return {"status": "rejected", "reason": "insufficient_funds"}
                 qty = notional / price
@@ -629,9 +631,11 @@ def fetch_all_data():
             if current_pos and current_pos["side"] == "BUY" and not want_add:
                 pass  # repeated signal on a long — no-op unless the strategy asks to add
             elif (current_pos and current_pos["side"] == "BUY") or (not current_pos):
-                trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)  # open or add long
+                trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id,
+                                             size_pct=sig.get("size_pct"))  # open or add long
             elif current_pos and current_pos["side"] == "SELL":
-                trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id)  # cover short
+                trade_result = execute_trade(sym, "BUY", price, strategy_name, signal_id,
+                                             size_pct=sig.get("size_pct"))  # cover short
         elif signal == "SELL":
             if current_pos and current_pos["side"] == "SELL" and not want_add:
                 pass  # repeated signal on a short — no-op unless add requested
