@@ -588,7 +588,11 @@ function calcBB(c,p,k){p=p||20;k=k||2;var n=Math.min(c.length,p);if(n<2){var lc=
 function calcATRApprox(c,p){p=p||14;if(c.length<p+1)return 0;var s=0;for(var i=c.length-p;i<c.length;i++)s+=Math.abs(c[i]-c[i-1]);return s/p;}
 
 var PI=1000; // 1s poll — high-frequency strategy evaluation (klines are cached server-side)
+var _fetching=false; // reentrancy guard: visibilitychange + throttled timers can
+                     // start parallel fetch loops that spawn extra orbs per second
 function fetchData(){
+  if(_fetching)return; // a competing loop dies here — it never schedules its own timer
+  _fetching=true;
   var start=Date.now();
   Promise.all([fetch('/api/data').then(function(r){return r.json();}),fetch('/api/positions').then(function(r){return r.json();}),fetch('/api/trades').then(function(r){return r.json();})])
     .then(function(results){var data=results[0],pos=results[1],trades=results[2],latency=Date.now()-start;
@@ -608,8 +612,8 @@ function fetchData(){
         // First data arrival: full render so the ticker rail gets built (R(false)
         // skips renderTickerRail). Later updates stay surgical to avoid flicker.
         if(!document.getElementById('tickerRail').querySelector('.panel')){R();}else{R(false);}
-      }setTimeout(fetchData,PI);
-    }).catch(function(err){document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();setTimeout(fetchData,PI);});
+      }_fetching=false;setTimeout(fetchData,PI);
+    }).catch(function(err){_fetching=false;document.getElementById('statusBar').textContent=I18n.t('api_error')+': '+err.message;document.getElementById('statusBar').className='text-[#FF2A6D]';DATA.connected=false;renderConnection();setTimeout(fetchData,PI);});
 }
 
 // ============================================================
