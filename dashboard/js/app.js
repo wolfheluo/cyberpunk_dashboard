@@ -49,8 +49,8 @@ function loadStrategyList(){
   var el=document.getElementById('strategyList');el.innerHTML='';
   strategiesList.forEach(function(s){
     var isActive=s.filename===activeStratFile;
-    el.innerHTML+='<div class="panel p-2 hover:border-[#00E5FF40]" style="border-color:'+(isActive?'#00E5FF':'')+'">'+
-      '<div class="flex justify-between items-center cursor-pointer" onclick="openStrategy(\''+s.filename+'\')"><span class="text-[15px] '+(isActive?'text-[#00FF66]':'text-[#00E5FF]')+'">'+s.name+'</span>'+(isActive?'<span class="badge-green">ACTIVE</span>':'')+'</div>'+
+    el.innerHTML+='<div class="panel p-2 hover:border-[#00E5FF40] cursor-pointer" style="border-color:'+(isActive?'#00E5FF':'')+'" onclick="openStrategy(\''+s.filename+'\')">'+
+      '<div class="flex justify-between items-center"><span class="text-[15px] '+(isActive?'text-[#00FF66]':'text-[#00E5FF]')+'">'+s.name+'</span>'+(isActive?'<span class="badge-green">ACTIVE</span>':'')+'</div>'+
       '<div class="flex justify-between items-center mt-0.5"><div class="text-[15px] text-[#5A6275]">'+s.description+'</div><button class="btn-sm danger" onclick="event.stopPropagation();deleteStrategy(\''+s.filename+'\')">✕</button></div></div>';
   });
   if(!strategiesList.length)el.innerHTML='<div class="text-[#5A6275]">No strategies found</div>';
