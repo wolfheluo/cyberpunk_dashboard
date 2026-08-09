@@ -90,8 +90,9 @@ def _safe_static_path(base, rel):
 
 def _strategy_meta(content):
     """Extract NAME/DESCRIPTION from a JS strategy file (object-literal style)."""
-    name_m = re.search(r'NAME\s*[:=]\s*"([^"]+)"', content)
-    desc_m = re.search(r'DESCRIPTION\s*[:=]\s*"([^"]+)"', content)
+    # N-14: accept both single- and double-quoted strings
+    name_m = re.search(r"""NAME\s*[:=]\s*["']([^"']+)["']""", content)
+    desc_m = re.search(r"""DESCRIPTION\s*[:=]\s*["']([^"']+)["']""", content)
     return (name_m.group(1) if name_m else None), (desc_m.group(1) if desc_m else "")
 
 def list_js_strategies():
@@ -114,6 +115,7 @@ def list_js_strategies():
 
 # Strategy state persisted server-side between polls (node processes are stateless)
 _strategy_state = {}
+_strategy_mtime = {}  # N-23: last-seen mtime per strategy file — file change => state invalid
 
 def _log_warn(msg):
     """Append a warning to the exec log (visible in the dashboard) with a cap."""
@@ -131,6 +133,15 @@ def run_js_strategy(strategy_file, ticker_infos):
     """
     if not HAS_NODE or not ticker_infos:
         return {}
+    # N-23: strategy file changed on disk (edit/pull) — stale state must not
+    # leak into the new code's semantics; reset it before handing off to node.
+    try:
+        mtime = os.path.getmtime(os.path.join(STRATEGIES_DIR, strategy_file))
+    except OSError:
+        mtime = None
+    if _strategy_mtime.get(strategy_file) != mtime:
+        _strategy_state.pop(strategy_file, None)
+        _strategy_mtime[strategy_file] = mtime
     helper = os.path.join(STRATEGIES_DIR, "_run_strategy.js")
     payload = json.dumps({"strategy": strategy_file,
                           "state": _strategy_state.get(strategy_file, {}),
@@ -277,7 +288,8 @@ def fetch_ticker24_cached(ttl=60):
     if data is not None:
         _ticker24_cache = data
         _ticker24_ts = now
-    return data
+    # D10/N-2: on failure fall back to the last good snapshot (stale > nothing)
+    return data if data is not None else _ticker24_cache
 
 # Cache klines so fast polls don't hammer the rate limit (indicators refresh slowly)
 _klines_cache = {}
@@ -291,7 +303,23 @@ def fetch_klines_cached(symbol, interval, limit=100, ttl=60):
     if data is not None:
         _klines_cache[key] = data
         _klines_cache_ts[key] = now
-    return data
+    # D10/N-2: failure falls back to stale klines (indicators degrade gracefully)
+    return data if data is not None else _klines_cache.get(key)
+
+# D11/N-3: bookTicker is fetched every poll today (weight 4/call, 240/min with
+# multiple tabs) — short TTL so the order book stays fresh without hammering.
+_book_cache = None
+_book_cache_ts = 0.0
+def fetch_book_cached(ttl=3):
+    global _book_cache, _book_cache_ts
+    now = time.time()
+    if _book_cache is not None and now - _book_cache_ts < ttl:
+        return _book_cache
+    data = fetch_json(f"{BINANCE_BASE}/api/v3/ticker/bookTicker")
+    if data is not None:
+        _book_cache = data
+        _book_cache_ts = now
+    return data if data is not None else _book_cache
 
 # ============================================================
 # TRADE EXECUTION
@@ -335,7 +363,7 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                     get_db().execute("DELETE FROM positions WHERE symbol=?", (symbol,))
                 else:
                     get_db().execute("UPDATE positions SET quantity=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
-                                    (remain, symbol))
+                                    (round(remain, 8), symbol))
             elif side == "BUY":
                 # ---- Open / add long (size_pct lets grid strategies scale lot size) ----
                 if cash < MIN_CASH:
@@ -350,10 +378,10 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                     new_qty = pos[1] + qty
                     avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
                     get_db().execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
-                                    (new_qty, avg_entry, price, (price-avg_entry)*new_qty, symbol))
+                                    (round(new_qty, 8), round(avg_entry, 8), price, round((price-avg_entry)*new_qty, 8), symbol))
                 else:
                     get_db().execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
-                                    (symbol, "BUY", price, qty, price, 0.0, strategy_name))
+                                    (symbol, "BUY", price, round(qty, 8), price, 0.0, strategy_name))
             elif side == "SELL" and pos and pos[0] == "BUY":
                 # ---- Close long: close close_pct of the position (grid trading) ----
                 close_pct = min(max(float(close_pct or 1.0), 0.01), 1.0)
@@ -366,7 +394,7 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                     get_db().execute("DELETE FROM positions WHERE symbol=?", (symbol,))
                 else:
                     get_db().execute("UPDATE positions SET quantity=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
-                                    (remain, price, (price - pos[2]) * remain, symbol))
+                                    (round(remain, 8), price, round((price - pos[2]) * remain, 8), symbol))
             else:
                 # ---- Open / add short ----
                 if cash < MIN_CASH:
@@ -381,10 +409,10 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                     new_qty = pos[1] + qty
                     avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
                     get_db().execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
-                                    (new_qty, avg_entry, price, (avg_entry-price)*new_qty, symbol))
+                                    (round(new_qty, 8), round(avg_entry, 8), price, round((avg_entry-price)*new_qty, 8), symbol))
                 else:
                     get_db().execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
-                                    (symbol, "SELL", price, qty, price, 0.0, strategy_name))
+                                    (symbol, "SELL", price, round(qty, 8), price, 0.0, strategy_name))
 
             # Record trade
             cur = get_db().execute(
@@ -666,7 +694,7 @@ def fetch_all_data():
     # Pass 1: build ticker + indicators for every watchlist symbol, then evaluate
     # the active JS strategy ONCE via node subprocess (no more hardcoded HOLD).
     book_map = {}
-    bt_raw = fetch_json(f"{BINANCE_BASE}/api/v3/ticker/bookTicker")
+    bt_raw = fetch_book_cached()  # D11/N-3: TTL-cached, not per-poll
     if bt_raw:
         for b in bt_raw:
             book_map[b["symbol"]] = b

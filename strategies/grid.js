@@ -25,12 +25,12 @@
       }
       var gp = Math.round((price - g.center) / g.step);
       if (gp <= -1) {  // fell below center → LONG grid
-        g.side = "long"; g.levels = 1; g.last = price;
+        g.side = "long"; g.levels = 1;
         return { signal: "BUY", confidence: 80, factors: { action: "grid_open_long", grid: gp },
                  size_pct: this.lotSize(1) };
       }
       if (gp >= 1) {  // rose above center → SHORT grid
-        g.side = "short"; g.levels = 1; g.last = price;
+        g.side = "short"; g.levels = 1;
         return { signal: "SELL", confidence: 80, factors: { action: "grid_open_short", grid: gp },
                  size_pct: this.lotSize(1) };
       }
@@ -50,7 +50,7 @@
       // buy one more level as price falls
       var buyLevel = -g.levels - 1;
       if (gridPos <= buyLevel && buyLevel >= -L) {
-        g.levels += 1; g.last = price;
+        g.levels += 1;
         factors.action = "grid_buy";
         return { signal: "BUY", confidence: 80, factors: factors, add: true,
                  size_pct: this.lotSize(g.levels) };
@@ -59,7 +59,7 @@
       var sellLevel = -g.levels + 1;
       if (gridPos >= sellLevel) {
         var closePct = 1 / g.levels;   // sequence 1/4→1/3→1/2→1 drains exactly
-        g.levels -= 1; g.last = price;
+        g.levels -= 1;
         factors.action = "grid_sell";
         if (g.levels === 0) this.grids[sym] = null; // drained — rebuild on next flat
         return { signal: "SELL", confidence: 80, factors: factors, close_pct: closePct };
@@ -74,7 +74,7 @@
       // add one more short as price rises
       var addLevel = g.levels + 1;
       if (gridPos >= addLevel && addLevel <= L) {
-        g.levels += 1; g.last = price;
+        g.levels += 1;
         factors.action = "grid_short_add";
         return { signal: "SELL", confidence: 80, factors: factors, add: true,
                  size_pct: this.lotSize(g.levels) };
@@ -83,7 +83,7 @@
       var coverLevel = g.levels - 1;
       if (gridPos <= coverLevel) {
         var closePct = 1 / g.levels;   // 1/4→1/3→1/2→1 drains exactly
-        g.levels -= 1; g.last = price;
+        g.levels -= 1;
         factors.action = "grid_cover";
         if (g.levels === 0) this.grids[sym] = null;
         return { signal: "BUY", confidence: 80, factors: factors, close_pct: closePct };

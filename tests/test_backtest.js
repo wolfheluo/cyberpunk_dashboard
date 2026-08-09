@@ -110,5 +110,20 @@ check('D6: add:true adds to position (3 trades, final 10000)',
   r3.trades_count === 3 && r3.final_equity === 10000,
   { trades: r3.trades_count, final_equity: r3.final_equity });
 
+// ============================================================
+// N-22: _run_strategy.js must reject traversal filenames (defence in depth)
+// ============================================================
+const evil = JSON.parse(execFileSync('node', [path.join(ROOT, 'strategies', '_run_strategy.js')], {
+  input: JSON.stringify({ strategy: '../../../../etc/passwd', tickers: [] }),
+  encoding: 'utf-8',
+}));
+check('N-22: _run_strategy.js rejects traversal filename', !!evil.error, evil);
+
+// ============================================================
+// N-24: grid.js dead state field g.last must be gone (write-only)
+// ============================================================
+const gridSrc = fs.readFileSync(path.join(ROOT, 'strategies', 'grid.js'), 'utf-8');
+check('N-24: grid.js has no g.last write-only state', !/\.last\s*=/.test(gridSrc));
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

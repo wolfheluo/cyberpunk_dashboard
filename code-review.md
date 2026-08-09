@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 22 | C-1 ~ C-5, M-1, M-2, M-4 ~ M-8, M-10, N-1, N-4, N-5, N-8, N-9, N-15, N-26, I-4, I-12 |
-| ⏳ 未修補（spec 已規劃未執行） | 28 | M-9, N-2, N-3, N-6, N-7, N-10 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-3, I-5 ~ I-8, I-13 |
+| ✅ 已修補（含測試證據） | 29 | C-1 ~ C-5, M-1, M-2, M-4 ~ M-8, M-10, N-1 ~ N-5, N-8, N-9, N-11, N-14, N-15, N-22 ~ N-24, N-26, I-4, I-12 |
+| ⏳ 未修補（spec 已規劃未執行） | 21 | M-9, N-6, N-7, N-10, N-12, N-13, N-16 ~ N-20, N-25, N-27, I-1 ~ I-3, I-5 ~ I-8, I-13 |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
 | ✅ 設計維持 | 1 | I-11 |
@@ -166,12 +166,12 @@
 `quant_fleet_server.py` 第 280 行 — `qty = min(pos[1]*close_pct, cash/price)` 現金不足靜默部分成交且回 filled，無 notional 下限檢查 → grid 狀態與實際倉位漂移。應回 rejected 或明確回報成交 qty。
 
 ### N-2. Binance fetch 快取失敗不回退 stale 資料
-**修補狀態**：⏳ 未修補 — line 233 失敗仍 `return data`（None），無 stale 回退；spec D10 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D10）— StaleCacheTests：ticker24/klines 失敗時回退上次成功快取（stale > None），頁面不再整頁 502/指標退化
 
 `quant_fleet_server.py` 第 233 行 — 請求失敗回 None → 整頁 502 或 klines=None 使指標退化（sma=0/macd=0 → 策略誤判）。應回傳過期快取。
 
 ### N-3. bookTicker 每 poll 抓取無快取
-**修補狀態**：⏳ 未修補 — line 620 仍每 poll 直接 `fetch_json(bookTicker)`；spec D11 已規劃 2-5s TTL，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D11）— `fetch_book_cached()` 3s TTL：連續呼叫僅 1 次 Binance 請求（測試驗證），多分頁不再逼近 1200 weight/min 上限
 
 `quant_fleet_server.py` 第 620 行 — weight≈4/call × 1s poll ≈ 240/min；多 tab 逼近 1200 上限。加 2-5s TTL。
 
@@ -211,7 +211,7 @@
 `quant_fleet_server.py` 第 323 行 — cash 隨做空增長可無限疊加空倉。限制總曝險或文件標註。
 
 ### N-11. positions 儲存未 round（與 trades 漂移）
-**修補狀態**：⏳ 未修補 — line 308 positions 仍存原始浮點（trades 有 round）；spec D21 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— RoundingTests：positions 開/加/平 6 處寫入統一 round(qty,8)（含 avg_entry/unrealized），與 trades 一致不再漂移
 
 `quant_fleet_server.py` 第 308 行 — trades round(qty,8) 但 positions 原始浮點，加倉/部分平倉後微漂移。
 
@@ -226,7 +226,7 @@
 `quant_fleet_server.py` 第 863 行 — `si==0` 與實際 active_strategy 無關，展示造假。
 
 ### N-14. 策略 NAME/DESCRIPTION regex 僅支援雙引號
-**修補狀態**：⏳ 未修補 — line 71 regex 仍僅 `\"([^\"]+)\"`；spec D21 已規劃改 `['\"]`，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— MetaRegexTests：NAME/DESCRIPTION regex 支援單/雙引號（`["']`），單引號策略 meta 正確提取
 
 `quant_fleet_server.py` 第 71 行 — 單引號字串的策略 meta 提取失敗。regex 改 `['"]`。
 
@@ -266,17 +266,17 @@
 `strategies/OBI.js`（82ef484^ 版本）第 61 行 — backtest 中永不過期、server 重啟後遺失。以 bar 序號取代。
 
 ### N-22. _run_strategy.js 未驗證策略檔名（縱深防禦缺失）
-**修補狀態**：⏳ 未修補 — strategies/_run_strategy.js line 18 仍無檔名驗證；spec D21 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— helper 加 `^[A-Za-z0-9_-]+\.js$` 顯式驗證（縱深防禦）；node 測試：traversal 檔名 → {error}
 
 `strategies/_run_strategy.js` 第 18 行 — helper 應自行檢查 `^[A-Za-z0-9_-]+\.js$`。
 
 ### N-23. 策略 state 版本相容（改檔不清 state）
-**修補狀態**：⏳ 未修補 — state 仍無 mtime/hash 版本判斷；spec D21 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— `_strategy_mtime` 記錄檔 mtime，檔案變更（編輯/pull）自動清 state；行為測試：真實 node 執行 + os.utime 驗證 FAKE marker 不殘留
 
 `strategies/_run_strategy.js` 第 22 行 — git pull/手動編輯改檔不清 state → 舊語義污染新 code。以 mtime/hash 判斷。
 
 ### N-24. grid.js 死狀態 g.last（只寫不讀）
-**修補狀態**：⏳ 未修補 — grid.js line 23 仍寫死狀態 `g.last`；spec D21 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— 移除全部 `g.last` 唯寫狀態（6 處）；node --check + 靜態斷言零殘留
 
 `strategies/grid.js` 第 23 行 — 移除或實作原意。
 

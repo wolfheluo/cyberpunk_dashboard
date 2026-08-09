@@ -15,6 +15,7 @@ process.stdin.on('data', d => { input += d; });
 process.stdin.on('end', () => {
   try {
     const req = JSON.parse(input);
+    if (!/^[A-Za-z0-9_-]+\.js$/.test(req.strategy || '')) throw new Error('invalid strategy filename');
     const code = fs.readFileSync(path.join(__dirname, req.strategy), 'utf-8');
     const strat = eval(code);
     if (!strat || typeof strat.evaluate !== 'function') throw new Error('strategy has no evaluate()');

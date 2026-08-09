@@ -4,7 +4,9 @@
 Seam: module-level monkeypatch of the network + strategy boundaries, then
 observe what execute_trade receives (public trade-execution contract).
 """
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -153,6 +155,8 @@ class PriceThrottleTests(unittest.TestCase):
         self.calls = []
         srv.active_strategy = "fake.js"
         srv._last_signal = {}
+        self._saved = (srv.fetch_json, srv.fetch_klines_cached,
+                       srv.run_js_strategy, srv.execute_trade)
         srv.fetch_json = _fake_fetch_json
         srv.fetch_klines_cached = _fake_klines
         srv.run_js_strategy = lambda *a, **k: {"BTC": {"signal": "HOLD"}}
@@ -160,6 +164,9 @@ class PriceThrottleTests(unittest.TestCase):
         with srv.db_lock:
             srv.get_db().execute("DELETE FROM prices")
             srv.get_db().commit()
+
+    def tearDown(self):
+        srv.fetch_json, srv.fetch_klines_cached, srv.run_js_strategy, srv.execute_trade = self._saved
 
     def _count_prices(self):
         with srv.db_lock:
@@ -233,12 +240,17 @@ class SignalsGrowthTests(unittest.TestCase):
     def setUp(self):
         srv.active_strategy = "fake.js"
         srv._last_signal = {}
+        self._saved = (srv.fetch_json, srv.fetch_klines_cached,
+                       srv.run_js_strategy, srv.execute_trade)
         srv.fetch_json = _fake_fetch_json
         srv.fetch_klines_cached = _fake_klines
         srv.execute_trade = lambda *a, **k: {"status": "filled"}
         with srv.db_lock:
             srv.get_db().execute("DELETE FROM signals")
             srv.get_db().commit()
+
+    def tearDown(self):
+        srv.fetch_json, srv.fetch_klines_cached, srv.run_js_strategy, srv.execute_trade = self._saved
 
     def test_wait_signal_not_written(self):
         srv.run_js_strategy = lambda *a, **k: {"BTC": {"signal": "WAIT"}}
@@ -264,6 +276,140 @@ class StaticRemediationTests(unittest.TestCase):
         src = self._server_src()
         for token in ("def _esc(", "def add_log(", "_trading_paused_until"):
             self.assertNotIn(token, src)
+
+
+class StaleCacheTests(unittest.TestCase):
+    """D10/N-2 + D11/N-3: fetch failures fall back to stale cache; bookTicker
+    is TTL-cached so 1s polls stop hammering Binance."""
+
+    def setUp(self):
+        srv._ticker24_cache = None
+        srv._ticker24_ts = 0.0
+        srv._klines_cache = {}
+        srv._klines_cache_ts = {}
+        srv._book_cache = None
+        srv._book_cache_ts = 0.0
+        self._saved_fetch = srv.fetch_json
+
+    def tearDown(self):
+        srv.fetch_json = self._saved_fetch
+
+    def test_ticker24_stale_fallback(self):
+        calls = {"n": 0}
+
+        def fake(url):
+            calls["n"] += 1
+            return [{"symbol": "BTCUSDT", "lastPrice": "100"}] if calls["n"] == 1 else None
+
+        srv.fetch_json = fake
+        first = srv.fetch_ticker24_cached()
+        second = srv.fetch_ticker24_cached(ttl=0)  # force re-fetch, which fails
+        self.assertIsNotNone(first)
+        self.assertEqual(second, first, "failure must fall back to stale cache, not None")
+
+    def test_klines_stale_fallback(self):
+        calls = {"n": 0}
+
+        def fake(url):
+            calls["n"] += 1
+            return [["t", "1", "2", "3", "4", "5"]] if calls["n"] == 1 else None
+
+        srv.fetch_json = fake
+        first = srv.fetch_klines_cached("BTCUSDT", "1h", ttl=0)
+        second = srv.fetch_klines_cached("BTCUSDT", "1h", ttl=0)
+        self.assertIsNotNone(first)
+        self.assertEqual(second, first)
+
+    def test_book_ttl_cached(self):
+        calls = {"n": 0}
+        srv.fetch_json = lambda url: calls.__setitem__("n", calls["n"] + 1) or [{"symbol": "BTCUSDT"}]
+        srv.fetch_book_cached()
+        srv.fetch_book_cached()
+        self.assertEqual(calls["n"], 1, "second call within TTL must not hit Binance")
+
+
+class RoundingTests(unittest.TestCase):
+    """N-11: positions quantity must be rounded like trades (no float drift)."""
+
+    def setUp(self):
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("UPDATE portfolio SET cash=10000 WHERE id=1")
+            db.commit()
+
+    def tearDown(self):
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.commit()
+
+    def test_open_position_qty_rounded_to_8(self):
+        r = srv.execute_trade("BTCUSDT", "BUY", 3, "t")  # 5% of 10k / 3 = 166.666...
+        self.assertEqual(r["status"], "filled", r)
+        with srv.db_lock:
+            qty = srv.get_db().execute(
+                "SELECT quantity FROM positions WHERE symbol='BTCUSDT'").fetchone()[0]
+        self.assertEqual(qty, round(500 / 3, 8), qty)
+
+
+class MetaRegexTests(unittest.TestCase):
+    """N-14: strategy NAME/DESCRIPTION extraction must accept single quotes."""
+
+    def test_single_quote_name_and_desc(self):
+        self.assertEqual(srv._strategy_meta("NAME: 'My Strat';\nDESCRIPTION: 'desc here';"),
+                         ("My Strat", "desc here"))
+
+    def test_double_quotes_still_work(self):
+        self.assertEqual(srv._strategy_meta('NAME: "X"'), ("X", ""))
+
+
+class StateMtimeTests(unittest.TestCase):
+    """N-23: strategy state must be dropped when the file changes on disk.
+
+    Behavioural: run the real node helper twice with a stubbed grid state; a
+    file mtime change between runs must invalidate the in-memory state so the
+    node process restarts from a clean slate.
+    """
+
+    def setUp(self):
+        self.target = os.path.join(ROOT, "strategies", "grid.js")
+        self.orig_mtime = os.path.getmtime(self.target)
+        srv.HAS_NODE = True
+        srv._strategy_state.clear()
+        srv._strategy_mtime.clear()
+
+    def tearDown(self):
+        os.utime(self.target, (self.orig_mtime, self.orig_mtime))
+        srv._strategy_state.clear()
+        srv._strategy_mtime.clear()
+
+    def test_mtime_change_resets_state(self):
+        # First run establishes state with a fresh marker (real node execution)
+        srv._strategy_state["grid.js"] = {"grids": {"BTC": {"FAKE": "stale"}}}
+        srv.run_js_strategy("grid.js", [{"id": "BTC", "ticker": {"id": "BTC", "name": "BTC",
+                                                                 "price": 100, "volume": 1,
+                                                                 "change_pct": 0, "high_24h": 101,
+                                                                 "low_24h": 99, "pct_from_high": 0,
+                                                                 "pct_from_low": 0, "book": None,
+                                                                 "position": None, "portfolio": None},
+                                         "indicators": {"closes": [100] * 60}}])
+        self.assertNotIn("FAKE", json.dumps(srv._strategy_state.get("grid.js", {})),
+                         "mtime baseline must already clear the stale marker")
+        # Touch the file — the next run must NOT carry over the previous state
+        srv._strategy_state["grid.js"] = {"grids": {"BTC": {"FAKE2": "stale2"}}}
+        os.utime(self.target, (self.orig_mtime + 5, self.orig_mtime + 5))
+        srv.run_js_strategy("grid.js", [{"id": "BTC", "ticker": {"id": "BTC", "name": "BTC",
+                                                                 "price": 100, "volume": 1,
+                                                                 "change_pct": 0, "high_24h": 101,
+                                                                 "low_24h": 99, "pct_from_high": 0,
+                                                                 "pct_from_low": 0, "book": None,
+                                                                 "position": None, "portfolio": None},
+                                         "indicators": {"closes": [100] * 60}}])
+        self.assertNotIn("FAKE2", json.dumps(srv._strategy_state.get("grid.js", {})),
+                         "state must be reset when the strategy file changes")
 
 
 if __name__ == "__main__":
