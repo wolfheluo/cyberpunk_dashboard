@@ -130,6 +130,14 @@ Strategy filenames are restricted to `[A-Za-z0-9_-]+.js`; path traversal is reje
 ## Writing a Strategy
 
 Strategies live in `strategies/` as JavaScript object literals. Each file must
+## Strategy Return Values
+
+`evaluate()` returns `{signal, confidence, factors}` plus two optional flags:
+
+- `add: true` — add to an existing same-side position (avg entry recalculated)
+- `close_pct: 0.2` — partial close ratio for SELL (default 1.0 = full close).
+  Used by grid strategies to sell one grid lot at a time.
+
 export `NAME`, `DESCRIPTION`, and an `evaluate(ticker, indicators)` function:
 
 ```js
