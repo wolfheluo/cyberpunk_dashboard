@@ -791,7 +791,8 @@ def fetch_all_data():
             if current_pos and current_pos["side"] == "SELL" and not want_add:
                 pass  # repeated signal on a short — no-op unless add requested
             elif (current_pos and current_pos["side"] == "SELL") or (not current_pos):
-                trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id)  # open or add short
+                trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id,
+                                             size_pct=sig.get("size_pct"))  # open or add short
             elif current_pos and current_pos["side"] == "BUY":
                 trade_result = execute_trade(sym, "SELL", price, strategy_name, signal_id,
                                              close_pct=sig.get("close_pct", 1.0))  # close long (partial for grids)

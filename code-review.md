@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 10 | C-1, C-2, C-4, C-5, M-5, M-6, M-7, M-8, N-15, N-26 |
-| ⏳ 未修補（spec 已規劃未執行） | 39 | M-1, M-2, M-4, M-9, M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 11 | C-1, C-2, C-4, C-5, M-1, M-5, M-6, M-7, M-8, N-15, N-26 |
+| ⏳ 未修補（spec 已規劃未執行） | 38 | M-2, M-4, M-9, M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -78,7 +78,7 @@
 ## 🟠 Major（功能缺損 / 安全弱點 / 一致性）
 
 ### M-1. SELL 開/加空路徑遺漏 size_pct
-**修補狀態**：⏳ **未修補** — quant_fleet_server.py line 778 SELL 開/加空仍無 `size_pct=` 參數；spec D7 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D7）— tests/test_server_unit.py 2/2 綠（monkeypatch seam）：SELL 開/加空分支現在傳 `size_pct=sig.get("size_pct")`（spy 收到 0.1，原本 None → 固定 5%）；BUY 對照路徑 0.2 正常；空頭網格金字塔（2%→6%）與多頭對稱
 
 **檔案**：`quant_fleet_server.py` 第 778 行
 **問題**：BUY 開/加多與 cover short 都有傳 `size_pct`，唯獨 SELL 開/加空沒傳 → 空頭永遠用固定 5%
