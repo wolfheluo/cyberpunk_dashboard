@@ -67,13 +67,14 @@ function openStrategy(fname){
 function createStrategy(){
   document.getElementById('stratModal').style.display='flex';
   var inp=document.getElementById('stratNameInput');
-  inp.value='new_strategy.js';
+  inp.value='new_strategy';
   setTimeout(function(){inp.focus();inp.select();},50);
 }
 function closeStratModal(){document.getElementById('stratModal').style.display='none';}
 function confirmCreateStrategy(){
   var name=document.getElementById('stratNameInput').value.trim();
   if(!name)return;
+  if(!/\.js$/.test(name))name+='.js'; // .js appended automatically
   closeStratModal();
   fetch('/api/strategy/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:name})})
     .then(function(r){return r.json();}).then(function(d){
