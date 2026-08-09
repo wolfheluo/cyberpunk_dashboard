@@ -18,26 +18,12 @@
     var g = this.grids[sym];
     var L = this.GRID_LEVELS;
 
-    // --- Flat: build / track the grid ---
+    // --- Flat: open the base position immediately, centered on the current
+    // price (aggressive mode — no waiting for a 0.1% drop to arm the grid). ---
     if (!pos) {
-      if (!g) {
-        this.grids[sym] = { center: price, step: price * this.GRID_STEP_PCT / 100, idx: 0, last: price };
-        return { signal: "HOLD", confidence: 50, factors: { action: "grid_armed", grid: 0 } };
-      }
-      var gp = Math.round((price - g.center) / g.step);
-      // Price wandered far above the grid → recenter on current price.
-      if (gp > L + 2) {
-        this.grids[sym] = { center: price, step: price * this.GRID_STEP_PCT / 100, idx: 0, last: price };
-        return { signal: "HOLD", confidence: 50, factors: { action: "grid_recenter", grid: 0 } };
-      }
-      // Price broke below the first level below center → open the position.
-      if (gp <= -1) {
-        this.grids[sym].idx = -1;
-        this.grids[sym].last = price;
-        return { signal: "BUY", confidence: 80, factors: { action: "grid_open", grid: -1 },
-                 size_pct: this.lotSize(1) };
-      }
-      return { signal: "HOLD", confidence: 50, factors: { action: "grid_wait", grid: gp } };
+      this.grids[sym] = { center: price, step: price * this.GRID_STEP_PCT / 100, idx: 0, last: price };
+      return { signal: "BUY", confidence: 80, factors: { action: "grid_open", grid: 0 },
+               size_pct: this.lotSize(1) };
     }
 
     // --- Position held: grid operations ---
@@ -49,24 +35,24 @@
     var factors = { action: "grid_hold", grid: gridPos };
 
     // No hysteresis: every 0.1% move acts immediately (aggressive mode).
-    // idx = lots currently held (negative). Move AT MOST one level per tick —
-    // a fast move across several levels is caught by subsequent ticks, so the
-    // lot-size math (close_pct = 1/|idx|) always stays correct.
-    var buyLevel = g.idx - 1;   // next buy level below current holding
+    // idx = the DEEPEST held grid level (0 = base position at center, -1 =
+    // one buy below, ...). Move AT MOST one level per tick — a fast move is
+    // caught by subsequent ticks, keeping the lot math exact.
+    var buyLevel = g.idx - 1;   // price must fall one more level to buy
     if (gridPos <= buyLevel && buyLevel >= -L && gridPos >= -L) {  // stay inside the grid
       g.idx -= 1; g.last = price;
       factors.action = "grid_buy";
-      // Deeper levels buy larger lots (pyramid): size = base × (1 + growth × (depth-1))
+      // Deeper levels buy larger lots (pyramid): depth = |idx|+1
       return { signal: "BUY", confidence: 80, factors: factors, add: true,
-               size_pct: this.lotSize(-g.idx) };
+               size_pct: this.lotSize(-g.idx + 1) };
     }
-    var sellLevel = g.idx + 1;  // next sell level above current holding
-    if (gridPos >= sellLevel && g.idx < 0) {
-      // Holding |idx| lots → each lot is 1/|idx| of the position.
-      // Sequence 1/3 → 1/2 → 1 drains the grid completely.
-      var closePct = 1 / (-g.idx);
+    var sellLevel = g.idx + 1;  // price rose back one level above the deepest holding
+    if (gridPos >= sellLevel && g.idx <= 0) {
+      // Held |idx|+1 lots (levels idx..0) → sell one lot = 1/(|idx|+1).
+      // Sequence 1/4 → 1/3 → 1/2 → 1 drains the grid exactly.
+      var closePct = 1 / (1 - g.idx);
       g.idx += 1; g.last = price;
-      if (g.idx === 0) this.grids[sym] = null; // grid finished — rebuild on next flat
+      if (g.idx > 0) this.grids[sym] = null; // drained above center — rebuild on next flat
       factors.action = "grid_sell";
       return { signal: "SELL", confidence: 80, factors: factors, close_pct: closePct };
     }
