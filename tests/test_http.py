@@ -5,6 +5,7 @@ Seams (pre-agreed in spec): public HTTP API behaviour, verified with raw
 requests that preserve the path verbatim (no client-side normalization), so
 traversal payloads reach the server exactly as an attacker would send them.
 """
+from concurrent.futures import ThreadPoolExecutor
 import http.client
 import json
 import os
@@ -194,6 +195,41 @@ class SimulateValidationTests(unittest.TestCase):
     def test_legit_simulate_still_works(self):
         st, body = self._sim({"symbol": "BTCUSDT", "side": "BUY", "price": 100.0})
         self.assertEqual(st, 200, body)
+
+
+class ConcurrencyTests(unittest.TestCase):
+    """D2 (M-4): ThreadingHTTPServer must serve concurrent DB-touching
+    requests without sqlite cross-thread errors (each thread gets its own
+    connection via get_db())."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.stop()
+
+    def test_mixed_concurrent_requests_all_ok(self):
+        endpoints = ["/api/portfolio", "/api/trades", "/api/symbols",
+                     "/api/strategies", "/dashboard/js/app.js",
+                     "/dashboard/i18n/en.json"]
+        bad = []
+
+        def hit(path):
+            for _ in range(4):
+                try:
+                    st, _ = self.srv.request("GET", path)
+                    if st >= 500:
+                        bad.append((path, st))
+                except Exception as e:  # noqa: BLE001
+                    bad.append((path, repr(e)))
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(hit, p) for p in endpoints for _ in range(4)]
+            for f in futures:
+                f.result(timeout=30)
+        self.assertEqual(bad, [])
 
 
 if __name__ == "__main__":

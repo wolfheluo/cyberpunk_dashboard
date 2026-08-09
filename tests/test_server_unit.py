@@ -7,6 +7,7 @@ observe what execute_trade receives (public trade-execution contract).
 import os
 import sys
 import tempfile
+import threading
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -77,6 +78,33 @@ class SellSizePctTests(unittest.TestCase):
         buys = [c for c in self.calls if c["side"] == "BUY"]
         self.assertTrue(buys)
         self.assertEqual(buys[0]["size_pct"], 0.2)
+
+
+class ThreadSafetyTests(unittest.TestCase):
+    """D2 (M-4): DB access must work from concurrent threads.
+
+    Today the module shares one sqlite3 connection created on the main thread;
+    any worker thread touching it raises ProgrammingError. After the fix each
+    thread gets its own connection via get_db() (threading.local).
+    """
+
+    def test_concurrent_db_reads_no_cross_thread_error(self):
+        errors = []
+
+        def worker():
+            try:
+                for _ in range(20):
+                    srv.rebuild_cycles()
+                    srv.equity_curve()
+            except Exception as e:  # noqa: BLE001
+                errors.append(repr(e))
+
+        threads = [threading.Thread(target=worker) for _ in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":

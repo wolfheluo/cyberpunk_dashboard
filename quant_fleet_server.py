@@ -27,7 +27,7 @@ def now_ts(fmt="%H:%M:%S"):
 SYMBOLS, SYMBOL_NAMES = [], []
 def reload_symbols():
     global SYMBOLS, SYMBOL_NAMES
-    rows = db_conn.execute("SELECT symbol,name FROM watchlist ORDER BY id").fetchall()
+    rows = get_db().execute("SELECT symbol,name FROM watchlist ORDER BY id").fetchall()
     SYMBOLS = [r[0] for r in rows]
     SYMBOL_NAMES = {r[0].replace("USDT",""): r[1] for r in rows}
 BINANCE_BASE = "https://api.binance.com"
@@ -40,7 +40,20 @@ MIN_CASH = 1000.0  # new positions rejected below this cash balance
 # ============================================================
 # SQLITE
 # ============================================================
-db_conn = init_db()
+# D2 (M-4): one connection per thread via threading.local — the module is
+# served by ThreadingHTTPServer (one thread per request), and sqlite3
+# connections are not safe to share across threads. init_db() is idempotent
+# (guarded seeds), so each worker thread lazily gets its own WAL connection.
+_thread_local = threading.local()
+db_conn = init_db()  # main-thread connection (module load, reload_symbols)
+
+def get_db():
+    conn = getattr(_thread_local, "conn", None)
+    if conn is None:
+        conn = init_db()
+        _thread_local.conn = conn
+    return conn
+
 reload_symbols()
 db_lock = threading.Lock()
 exec_log = []
@@ -282,11 +295,11 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
     """
     with db_lock:
         try:
-            portfolio = db_conn.execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
+            portfolio = get_db().execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
             if not portfolio:
                 return {"status": "failed", "reason": "db_error"}
             cash = portfolio[0]
-            pos = db_conn.execute("SELECT side,quantity,entry_price FROM positions WHERE symbol=?", (symbol,)).fetchone()
+            pos = get_db().execute("SELECT side,quantity,entry_price FROM positions WHERE symbol=?", (symbol,)).fetchone()
             realized = 0.0
             trade_side = side
 
@@ -301,9 +314,9 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                 cash_change = -notional
                 remain = pos[1] - qty
                 if remain <= 0.00001:
-                    db_conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
+                    get_db().execute("DELETE FROM positions WHERE symbol=?", (symbol,))
                 else:
-                    db_conn.execute("UPDATE positions SET quantity=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                    get_db().execute("UPDATE positions SET quantity=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
                                     (remain, symbol))
             elif side == "BUY":
                 # ---- Open / add long (size_pct lets grid strategies scale lot size) ----
@@ -318,10 +331,10 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                 if pos:  # add to existing long
                     new_qty = pos[1] + qty
                     avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
-                    db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                    get_db().execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
                                     (new_qty, avg_entry, price, (price-avg_entry)*new_qty, symbol))
                 else:
-                    db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
+                    get_db().execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
                                     (symbol, "BUY", price, qty, price, 0.0, strategy_name))
             elif side == "SELL" and pos and pos[0] == "BUY":
                 # ---- Close long: close close_pct of the position (grid trading) ----
@@ -332,9 +345,9 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                 cash_change = notional
                 remain = pos[1] - qty
                 if remain <= 0.00001:
-                    db_conn.execute("DELETE FROM positions WHERE symbol=?", (symbol,))
+                    get_db().execute("DELETE FROM positions WHERE symbol=?", (symbol,))
                 else:
-                    db_conn.execute("UPDATE positions SET quantity=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                    get_db().execute("UPDATE positions SET quantity=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
                                     (remain, price, (price - pos[2]) * remain, symbol))
             else:
                 # ---- Open / add short ----
@@ -349,27 +362,27 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                 if pos:  # add to existing short
                     new_qty = pos[1] + qty
                     avg_entry = (pos[2]*pos[1] + price*qty) / new_qty
-                    db_conn.execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
+                    get_db().execute("UPDATE positions SET quantity=?,entry_price=?,current_price=?,unrealized_pnl=?,updated_at=datetime('now', '+8 hours') WHERE symbol=?",
                                     (new_qty, avg_entry, price, (avg_entry-price)*new_qty, symbol))
                 else:
-                    db_conn.execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
+                    get_db().execute("INSERT INTO positions (symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy) VALUES (?,?,?,?,?,?,?)",
                                     (symbol, "SELL", price, qty, price, 0.0, strategy_name))
 
             # Record trade
-            cur = db_conn.execute(
+            cur = get_db().execute(
                 "INSERT INTO trades (symbol,side,price,quantity,notional,strategy,signal_id) VALUES (?,?,?,?,?,?,?)",
                 (symbol, trade_side, price, round(qty, 8), round(notional, 2), strategy_name, signal_id))
             trade_id = cur.lastrowid
 
             # Update cash
-            db_conn.execute("UPDATE portfolio SET cash=cash+?, updated_at=datetime('now', '+8 hours') WHERE id=1",
+            get_db().execute("UPDATE portfolio SET cash=cash+?, updated_at=datetime('now', '+8 hours') WHERE id=1",
                             (cash_change,))
-            db_conn.commit()
+            get_db().commit()
             return {"status": "filled", "trade_id": trade_id, "quantity": round(qty, 8),
                     "notional": round(notional, 2), "realized_pnl": round(realized, 2)}
         except Exception:
             try:
-                db_conn.rollback()
+                get_db().rollback()
             except Exception:
                 pass
             return {"status": "failed", "reason": "db_error"}
@@ -380,7 +393,7 @@ def equity_curve():
     rebuilt from the last 200 trades and drifted.
     Returns [[ts, equity], ...] from initial capital to now (incl. open MTM).
     """
-    rows = db_conn.execute(
+    rows = get_db().execute(
         "SELECT symbol,side,price,quantity,created_at FROM trades ORDER BY id ASC").fetchall()
     cash = float(INITIAL_CAPITAL)
     pos = {}  # sym -> {"side","qty","entry"}
@@ -436,7 +449,7 @@ def rebuild_cycles():
     closes), total opened quantity, unrealized (open cycles only, marked at
     the last re-marked price), realized PnL, strategy.
     """
-    rows = db_conn.execute(
+    rows = get_db().execute(
         "SELECT symbol,side,price,quantity,strategy,created_at FROM trades ORDER BY id ASC").fetchall()
     symbols = []
     for r in rows:
@@ -444,7 +457,7 @@ def rebuild_cycles():
             symbols.append(r[0])
 
     cur_price = {}
-    for r in db_conn.execute("SELECT symbol,current_price FROM positions").fetchall():
+    for r in get_db().execute("SELECT symbol,current_price FROM positions").fetchall():
         if r[1]:
             cur_price[r[0]] = r[1]
 
@@ -512,7 +525,7 @@ def portfolio_stats(initial_capital=INITIAL_CAPITAL):
     Supports long AND short positions (SELL opens short, BUY covers).
     Returns (win_rate, sharpe, max_drawdown) — each None when there is not enough data.
     """
-    rows = db_conn.execute("SELECT symbol,side,price,quantity FROM trades ORDER BY id ASC").fetchall()
+    rows = get_db().execute("SELECT symbol,side,price,quantity FROM trades ORDER BY id ASC").fetchall()
     if not rows:
         return None, None, None
     cash = initial_capital
@@ -607,27 +620,27 @@ def fetch_all_data():
 
     # Get current portfolio
     with db_lock:
-        pf = db_conn.execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
+        pf = get_db().execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
         cash = pf[0] if pf else INITIAL_CAPITAL
         positions_map = {}
-        for r in db_conn.execute("SELECT symbol,side,quantity,entry_price FROM positions"):
+        for r in get_db().execute("SELECT symbol,side,quantity,entry_price FROM positions"):
             positions_map[r[0]] = {"side":r[1],"quantity":r[2],"entry_price":r[3]}
 
     # Re-mark open positions with current prices (positions would otherwise be stale)
     with db_lock:
-        for r in db_conn.execute("SELECT symbol,side,quantity,entry_price FROM positions").fetchall():
+        for r in get_db().execute("SELECT symbol,side,quantity,entry_price FROM positions").fetchall():
             pm = price_map.get(r[0] + "USDT")
             if pm:
                 # long: (cur-entry)*qty ; short: (entry-cur)*qty
                 upnl = (pm["price"] - r[3]) * r[2] if r[1] == "BUY" else (r[3] - pm["price"]) * r[2]
-                db_conn.execute(
+                get_db().execute(
                     "UPDATE positions SET current_price=?, unrealized_pnl=?, updated_at=datetime('now', '+8 hours') WHERE symbol=?",
                     (pm["price"], upnl, r[0]))
-        db_conn.commit()
+        get_db().commit()
 
     # Record prices for historical tracking (every 5 min to avoid bloat)
     with db_lock:
-        last_rec = db_conn.execute("SELECT MAX(recorded_at) FROM prices").fetchone()[0]
+        last_rec = get_db().execute("SELECT MAX(recorded_at) FROM prices").fetchone()[0]
         should_record = not last_rec or (datetime.now() - datetime.fromisoformat(last_rec)).total_seconds() > 300
 
     # Pass 1: build ticker + indicators for every watchlist symbol, then evaluate
@@ -640,9 +653,9 @@ def fetch_all_data():
 
     # Portfolio snapshot for strategy params (position + available cash + equity)
     with db_lock:
-        pf_row = db_conn.execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
+        pf_row = get_db().execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
         portfolio_cash = pf_row[0] if pf_row else INITIAL_CAPITAL
-        pos_rows = db_conn.execute("SELECT symbol,side,quantity,entry_price FROM positions").fetchall()
+        pos_rows = get_db().execute("SELECT symbol,side,quantity,entry_price FROM positions").fetchall()
     pos_map = {r[0]: {"side": r[1], "quantity": r[2], "entry_price": r[3]} for r in pos_rows}
     pos_value = sum(v["quantity"] * (price_map.get(s + "USDT", {}).get("price", 0) or 0)
                     * (1 if v["side"] == "BUY" else -1) for s, v in pos_map.items())
@@ -665,8 +678,8 @@ def fetch_all_data():
         if should_record and pm:
             try:
                 with db_lock:
-                    db_conn.execute("INSERT INTO prices (symbol, price) VALUES (?, ?)", (sym, price))
-                    db_conn.commit()
+                    get_db().execute("INSERT INTO prices (symbol, price) VALUES (?, ?)", (sym, price))
+                    get_db().commit()
             except Exception:
                 pass
 
@@ -741,11 +754,11 @@ def fetch_all_data():
         signal_id = None
         if signal != "HOLD":
             with db_lock:
-                cur = db_conn.execute(
+                cur = get_db().execute(
                     "INSERT INTO signals (symbol,signal,confidence,price,factors_json,strategy) VALUES (?,?,?,?,?,?)",
                     (sym, signal, confidence, price, json.dumps(factors_dict), strategy_name))
                 signal_id = cur.lastrowid
-                db_conn.commit()
+                get_db().commit()
 
         # Decision log: record ONLY signal transitions (HOLD→SELL etc.), never
         # repeated states — the log should show what changed, not the same
@@ -852,8 +865,8 @@ def fetch_all_data():
 
     # Re-read positions & trades after execution
     with db_lock:
-        updated_positions = db_conn.execute("SELECT symbol,side,quantity,entry_price FROM positions").fetchall()
-        pf = db_conn.execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
+        updated_positions = get_db().execute("SELECT symbol,side,quantity,entry_price FROM positions").fetchall()
+        pf = get_db().execute("SELECT cash FROM portfolio WHERE id=1").fetchone()
         cash = pf[0] if pf else INITIAL_CAPITAL
 
     positions_map2 = {r[0]:{"side":r[1],"qty":r[2],"entry":r[3]} for r in updated_positions}
@@ -932,20 +945,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "active":active_strategy
             })
         elif self.path=="/api/positions":
-            rows = db_conn.execute("SELECT symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy,opened_at FROM positions ORDER BY opened_at DESC").fetchall()
+            rows = get_db().execute("SELECT symbol,side,entry_price,quantity,current_price,unrealized_pnl,strategy,opened_at FROM positions ORDER BY opened_at DESC").fetchall()
             self._json(200,{"positions":[{"symbol":r[0],"side":r[1],"entry_price":r[2],"quantity":r[3],"current_price":r[4],"unrealized_pnl":r[5],"strategy":r[6],"opened_at":r[7]} for r in rows]})
         elif self.path=="/api/trades":
-            rows = db_conn.execute("SELECT symbol,side,price,quantity,notional,status,strategy,created_at FROM trades ORDER BY created_at DESC LIMIT 200").fetchall()
+            rows = get_db().execute("SELECT symbol,side,price,quantity,notional,status,strategy,created_at FROM trades ORDER BY created_at DESC LIMIT 200").fetchall()
             self._json(200,{"trades":[{"symbol":r[0],"side":r[1],"price":r[2],"quantity":r[3],"notional":r[4],"status":r[5],"strategy":r[6],"created_at":r[7]} for r in rows]})
         elif self.path=="/api/portfolio":
-            pf = db_conn.execute("SELECT cash,initial_capital FROM portfolio WHERE id=1").fetchone()
+            pf = get_db().execute("SELECT cash,initial_capital FROM portfolio WHERE id=1").fetchone()
             pos_val = sum(r[3]*(r[0] if r[0] else r[1]) * (1 if r[2] == "BUY" else -1)
-                           for r in db_conn.execute("SELECT current_price,entry_price,side,quantity FROM positions").fetchall())
+                           for r in get_db().execute("SELECT current_price,entry_price,side,quantity FROM positions").fetchall())
             self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,
                             "total_equity":pf[0]+pos_val, "cycles": rebuild_cycles(),
                             "equity_curve": equity_curve()})
         elif self.path == "/api/symbols":
-            rows = db_conn.execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()
+            rows = get_db().execute("SELECT id,symbol,name FROM watchlist ORDER BY id").fetchall()
             self._json(200, {"symbols":[{"id":r[0],"symbol":r[1],"name":r[2]} for r in rows]})
         elif self.path.startswith("/dashboard/i18n/") or self.path.startswith("/i18n/"):
             fname = self.path.replace("/dashboard/i18n/", "").replace("/i18n/", "")
@@ -1070,11 +1083,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif self.path=="/api/reset":
             global _trading_paused_until
             with db_lock:
-                db_conn.execute("DELETE FROM trades");
-                db_conn.execute("DELETE FROM positions");
-                db_conn.execute("DELETE FROM signals");
-                db_conn.execute("UPDATE portfolio SET cash=?,updated_at=datetime('now', '+8 hours') WHERE id=1", (INITIAL_CAPITAL,))
-                db_conn.commit()
+                get_db().execute("DELETE FROM trades");
+                get_db().execute("DELETE FROM positions");
+                get_db().execute("DELETE FROM signals");
+                get_db().execute("UPDATE portfolio SET cash=?,updated_at=datetime('now', '+8 hours') WHERE id=1", (INITIAL_CAPITAL,))
+                get_db().commit()
             with log_lock: exec_log.clear()
             active_strategy = ""  # no strategy after reset — user picks one when ready
             self._json(200,{"status":"reset","capital":INITIAL_CAPITAL,"active_strategy":""})
@@ -1128,7 +1141,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif self.path == "/api/backtest/run":
             # Run backtest on-the-fly: evaluate all JS strategies against all
             # symbols' historical klines via node subprocess (one call per strategy).
-            symbols_in_db = db_conn.execute("SELECT DISTINCT symbol FROM historical_klines").fetchall()
+            symbols_in_db = get_db().execute("SELECT DISTINCT symbol FROM historical_klines").fetchall()
             if not symbols_in_db:
                 self._json(400, {"error": "No historical data. Run: python3 init_db.py"})
                 return
@@ -1138,7 +1151,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             symbols_klines = {}
             for (sym,) in symbols_in_db:
-                rows = db_conn.execute("SELECT date,open,high,low,close,volume FROM historical_klines WHERE symbol=? ORDER BY date", (sym,)).fetchall()
+                rows = get_db().execute("SELECT date,open,high,low,close,volume FROM historical_klines WHERE symbol=? ORDER BY date", (sym,)).fetchall()
                 if not rows:
                     continue
                 symbols_klines[sym] = [{"date": r[0], "open": r[1], "high": r[2], "low": r[3], "close": r[4], "volume": r[5]} for r in rows]
@@ -1164,8 +1177,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if (not (1 <= len(name) <= 64) or any(ch in name for ch in '<>"\'&')
                     or any(ord(ch) < 32 for ch in name)):
                 self._json(400, {"error":"Invalid name — no HTML special characters"}); return
-            db_conn.execute("INSERT OR IGNORE INTO watchlist (symbol,name) VALUES (?,?)", (sym,name))
-            db_conn.commit(); reload_symbols()
+            get_db().execute("INSERT OR IGNORE INTO watchlist (symbol,name) VALUES (?,?)", (sym,name))
+            get_db().commit(); reload_symbols()
             self._json(200, {"status":"added","symbol":sym,"name":name})
         else:
             self.send_error(404)
@@ -1175,8 +1188,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             sym = self.path.split("/api/symbols/")[1].upper()
             if not re.fullmatch(r"[A-Z0-9]+USDT", sym):
                 self._json(400, {"error": "Invalid symbol"}); return
-            db_conn.execute("DELETE FROM watchlist WHERE symbol=?", (sym,))
-            db_conn.commit(); reload_symbols()
+            get_db().execute("DELETE FROM watchlist WHERE symbol=?", (sym,))
+            get_db().commit(); reload_symbols()
             self._json(200, {"status":"deleted","symbol":sym})
         else:
             self.send_error(405)
@@ -1195,8 +1208,11 @@ def main():
         print(f"Node.js: OK (strategy eval + backtest engine)")
     else:
         print(f"WARNING: Node.js not found — strategies will stay HOLD and backtest is disabled")
-    server=http.server.HTTPServer(("0.0.0.0",port),Handler)
+    server=http.server.ThreadingHTTPServer(("0.0.0.0",port),Handler)
     try: server.serve_forever()
-    except KeyboardInterrupt: db_conn.close(); server.shutdown()
+    except KeyboardInterrupt:
+        conn = getattr(_thread_local, "conn", None)
+        if conn: conn.close()
+        server.shutdown()
 
 if __name__=="__main__": main()

@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 11 | C-1, C-2, C-4, C-5, M-1, M-5, M-6, M-7, M-8, N-15, N-26 |
-| ⏳ 未修補（spec 已規劃未執行） | 38 | M-2, M-4, M-9, M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 12 | C-1, C-2, C-4, C-5, M-1, M-4, M-5, M-6, M-7, M-8, N-15, N-26 |
+| ⏳ 未修補（spec 已規劃未執行） | 37 | M-2, M-9, M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -102,7 +102,7 @@
 **修復**：至少限制寫入型端點僅 localhost / 加 token 認證 / 移除 CORS *
 
 ### M-4. HTTPServer 單執行緒 — 慢請求阻塞全站
-**修補狀態**：⏳ **未修補** — line 1164 仍 `http.server.HTTPServer`（非 Threading）；spec D2 已決策方案 C（ThreadingHTTPServer + threading.local get_db()），未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D2 方案 C）— tests/test_server_unit.py ThreadSafetyTests（6 執行緒並發 20 輪 rebuild_cycles/equity_curve，修補前 ProgrammingError 重現→修補後無錯）+ tests/test_http.py ConcurrencyTests（8 workers × 24 請求混合端點全 200）：`ThreadingHTTPServer` + `get_db()`（threading.local 每執行緒獨立 SQLite 連線，50 處遷移），既有 db_lock 保留
 
 **檔案**：`quant_fleet_server.py` 第 1164 行
 **問題**：非 ThreadingHTTPServer；fetch_all_data 含同步網路呼叫（timeout 10s×3）+ node 子程序（15s）+ backtest 循序（120s×N）
