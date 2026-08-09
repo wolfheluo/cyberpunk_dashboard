@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 4 | C-1, C-2, M-6, N-15 |
-| ⏳ 未修補（spec 已規劃未執行） | 45 | C-4, C-5, M-1, M-2, M-4, M-5, M-7 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 5 | C-1, C-2, M-6, M-7, N-15 |
+| ⏳ 未修補（spec 已規劃未執行） | 44 | C-4, C-5, M-1, M-2, M-4, M-5, M-8 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -126,7 +126,7 @@
 **修復**：esc() 補轉 `" '`；所有內插值過 esc()；server 端 name 白名單
 
 ### M-7. I18n.init() 無 .catch — i18n 載入失敗整機死機
-**修補狀態**：⏳ **未修補** — app.js line 783 `I18n.init().then(...)` 仍無 `.catch`；spec D19 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D19）— tests/test_frontend.js D19 行為測試 2/2 綠：vm stub fetch 全失敗下 `I18n.init()` 仍 resolve（boot 繼續、T() 回退英文/key 名）；boot call site 已加 .catch 兜底；init 失敗後 15s 自動重試語言檔
 
 **檔案**：`dashboard/js/app.js` 第 783 行
 **問題**：init().then 無 catch；任一語言檔 fetch 失敗 → fetchData 永不啟動、永久 Initializing

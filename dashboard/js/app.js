@@ -5,7 +5,15 @@ var I18n=(function(){var l='en',d={},r=false,q=[];
 function L(ln){return fetch('/dashboard/i18n/'+ln+'.json').then(function(r){return r.json();}).then(function(dd){d[ln]=dd;});}
 function T(k,p){var dd=d[l]||d['en']||{},s=dd[k]||(d['en']&&d['en'][k])||k;if(p){for(var kk in p)s=s.split('{'+kk+'}').join(p[kk]);}return s;}
 function B(){var es=document.querySelectorAll('[data-i18n]');for(var i=0;i<es.length;i++){var e=es[i],k=e.getAttribute('data-i18n');if(k)e.textContent=T(k);}}
-function I(){return Promise.all([L('en'),L('zh')]).then(function(){r=true;B();q.forEach(function(f){f();});q=[];});}
+function I(){
+  function boot(){r=true;B();q.forEach(function(f){f();});q=[];}
+  // D19: never reject — boot with whatever loaded (T() falls back to en / key
+  // names) and retry the language files so a transient failure heals itself.
+  return Promise.all([L('en'),L('zh')]).then(boot).catch(function(){
+    boot();
+    setTimeout(function(){Promise.all([L('en'),L('zh')]).then(function(){B();});},15000);
+  });
+}
 return{init:I,t:T,setLang:function(ln){
   l=ln;
   document.getElementById('btnEN').className='lang-btn'+(ln==='en'?' active':'');
@@ -780,7 +788,7 @@ loadAccount=function(){
 };
 
 R();animateRadarPulse();
-connectBinanceWS();I18n.init().then(function(){loadStrategies();loadActiveJSStrategy();R();fetchData();});
+connectBinanceWS();I18n.init().then(function(){loadStrategies();loadActiveJSStrategy();R();fetchData();}).catch(function(){loadStrategies();loadActiveJSStrategy();R();fetchData();});
 // Browsers throttle background-tab timers (setTimeout → ~1/min), which stalls
 // polling, prices and strategy execution while the tab is hidden. Jump back to
 // the foreground → fetch immediately instead of waiting for the throttled timer.

@@ -95,5 +95,34 @@ check('logLine escapes confidence param', /I18n\.t\('log_conf',\{c:esc\(e\.confi
 // pipeline node radius must compare by index, not translated label (zh bug)
 check('pipeline uses index comparison, not label', !/nd\.label==='SIGNAL'/.test(src));
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+// ---- D19 (M-7): I18n.init must RESOLVE even when language files fail to load ----
+// Behavioural test: stub fetch to always reject, boot the I18n module in a vm,
+// and require init() to settle successfully (dashboard boot continues in
+// English/defaults instead of dying on an unhandled rejection).
+(async () => {
+  const sandbox = {
+    fetch: () => Promise.reject(new Error('network down')),
+    document: { querySelectorAll: () => [], getElementById: () => null },
+    Promise, setTimeout, console,
+  };
+  vm.createContext(sandbox);
+  const i18nSrc = src.match(/var I18n=\(function\(\)\{[\s\S]*?\}\)\(\);/);
+  check('D19: I18n module source found', !!i18nSrc);
+  if (i18nSrc) {
+    vm.runInContext(i18nSrc[0] + ';this.I18n=I18n;', sandbox);
+    let settled = null;
+    try {
+      await sandbox.I18n.init();
+      settled = 'resolved';
+    } catch (e) {
+      settled = 'rejected: ' + e.message;
+    }
+    check('D19: init() resolves when i18n fetch fails', settled === 'resolved', settled);
+  }
+  // Static guard: the boot call site must also have a catch fallback
+  check('D19: boot call site has .catch fallback',
+    /I18n\.init\(\)\.then\(function\(\)\{loadStrategies\(\);loadActiveJSStrategy\(\);R\(\);fetchData\(\);\}\)\.catch/.test(src));
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+})();
