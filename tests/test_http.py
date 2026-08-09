@@ -269,5 +269,44 @@ class StrategyFilenameTests(unittest.TestCase):
         self.assertEqual(status, 400)
 
 
+class HeadRequestTests(unittest.TestCase):
+    """T-07 (M-6): do_HEAD must mirror do_GET (same headers, no body). The
+    default SimpleHTTPRequestHandler.do_HEAD served directory listings of the
+    project root over the LAN — a file-tree leak."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.stop()
+
+    def _head(self, path):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.port, timeout=5)
+        c.putrequest("HEAD", path, skip_accept_encoding=True)
+        c.endheaders()
+        r = c.getresponse()
+        body = r.read()  # HEAD: no body expected
+        headers = dict(r.getheaders())
+        c.close()
+        return r.status, body, headers
+
+    def test_head_root_matches_get(self):
+        g_status, g_body = self.srv.request("GET", "/")
+        status, body, headers = self._head("/")
+        self.assertEqual(status, g_status)
+        self.assertEqual(body, b"", "HEAD must not carry a body")
+        self.assertEqual(headers.get("Content-Length"), str(len(g_body)),
+                         "HEAD / must advertise the dashboard length, not a directory listing")
+
+    def test_head_api_matches_get(self):
+        g_status, g_body = self.srv.request("GET", "/api/strategies")
+        status, body, headers = self._head("/api/strategies")
+        self.assertEqual(status, g_status)
+        self.assertEqual(body, b"")
+        self.assertEqual(headers.get("Content-Length"), str(len(g_body)))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

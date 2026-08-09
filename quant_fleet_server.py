@@ -1044,6 +1044,13 @@ def fetch_all_data():
 # HTTP
 # ============================================================
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_HEAD(self):
+        # T-07 (M-6): default SimpleHTTPRequestHandler.do_HEAD served a
+        # directory listing of the project root (file-tree leak over the LAN).
+        # HEAD must mirror GET: same headers, no body — do_GET skips body
+        # writes when self.command == "HEAD".
+        self.do_GET()
+
     def do_GET(self):
         if self.path=="/api/data":
             data = fetch_all_data()
@@ -1073,7 +1080,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             path = _safe_static_path(os.path.join(_BASE, "dashboard", "i18n"), fname)
             if path and os.path.isfile(path):
                 with open(path, "rb") as f: content = f.read()
-                self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
+                self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(content))); self.end_headers()
+                if self.command != "HEAD": self.wfile.write(content)
             else: self.send_error(404)
         elif self.path.startswith("/dashboard/"):
             rel = self.path[len("/dashboard/"):]
@@ -1081,12 +1089,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if fpath and fpath.endswith((".html", ".js", ".css", ".json")) and os.path.isfile(fpath):
                 ct = "text/css" if fpath.endswith(".css") else "application/javascript" if fpath.endswith(".js") else "text/plain"
                 with open(fpath, "rb") as f: content = f.read()
-                self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length", str(len(content))); self.end_headers(); self.wfile.write(content)
+                self.send_response(200); self.send_header("Content-Type", ct); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length", str(len(content))); self.end_headers()
+                if self.command != "HEAD": self.wfile.write(content)
             else: self.send_error(404)
         elif self.path in ("/","/index.html"):
             try:
                 with open(HTML_PATH,"rb") as f: content=f.read()
-                self.send_response(200); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(content))); self.end_headers(); self.wfile.write(content)
+                self.send_response(200); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(content))); self.end_headers()
+                if self.command != "HEAD": self.wfile.write(content)
             except: self.send_error(404)
         elif self.path.startswith("/api/strategy/") and self.path.endswith("/code"):
             try:
@@ -1153,7 +1163,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Disposition","attachment; filename=strategy_params.csv")
             self.send_header("Content-Length",str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            if self.command != "HEAD": self.wfile.write(body)
         else:
             self.send_error(404)
 
@@ -1323,7 +1333,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def _json(self,code,data):
         body=json.dumps(data).encode()
-        self.send_response(code); self.send_header("Content-Type","application/json"); self.send_header("Access-Control-Allow-Origin","*"); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
+        self.send_response(code); self.send_header("Content-Type","application/json"); self.send_header("Access-Control-Allow-Origin","*"); self.send_header("Content-Length",str(len(body))); self.end_headers()
+        if self.command != "HEAD": self.wfile.write(body)
     def log_message(self,f,*a): pass
 
 def main():
