@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 12 | C-1, C-2, C-4, C-5, M-1, M-4, M-5, M-6, M-7, M-8, N-15, N-26 |
-| ⏳ 未修補（spec 已規劃未執行） | 37 | M-2, M-9, M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 14 | C-1, C-2, C-4, C-5, M-1, M-4, M-5, M-6, M-7, M-8, M-10, N-9, N-15, N-26 |
+| ⏳ 未修補（spec 已規劃未執行） | 35 | M-2, M-9, N-1 ~ N-8, N-10 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -150,7 +150,7 @@
 **修復**：recover 依 position.quantity 反推 levels；至少避免 close_pct=1.0 全平路徑
 
 ### M-10. active_strategy 指向已刪檔案 + node 失敗靜默 + save 無語法檢查
-**修補狀態**：⏳ **未修補** — line 48 `active_strategy = "default.js"` 仍指向不存在的檔案（無啟動存在性檢查）；/api/strategy/save（line 1081）仍無 `node --check`；spec D17 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D17）— tests/test_http.py SaveSyntaxCheckTests 3/3 綠：壞語法/壞 object literal save → 400（node --check 攔截，原本直接寫入後每 poll 靜默失敗）；tests/test_server_unit.py ErrorVisibilityTests 2/2：fetch_json 失敗寫 stderr、node 失敗/ENOENT 進 exec_log 警告（`_log_warn`，cap 300）；run_js_strategy/backtests 失敗路徑全部可觀察
 
 **檔案**：`quant_fleet_server.py` 第 48/113/1081 行
 **問題**：啟動預設 default.js 無存在性檢查（ENOENT 靜默回 {}）；run_js_strategy 失敗全靜默；/save 不跑 node --check
@@ -202,7 +202,7 @@
 `quant_fleet_server.py` 第 17/52/1043 行 — `_esc` 無呼叫點、`add_log` 無呼叫者、`global _trading_paused_until` 指向未定義名字。刪除。
 
 ### N-9. fetch_json 裸 except 吞錯 + log_message 靜默
-**修補狀態**：⏳ 未修補 — line 216 `fetch_json` 仍裸 `except: return None`；spec D17 已規劃寫 exec_log/stderr，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D17）— fetch_json 失敗寫 stderr（含 URL 與錯誤）；node 策略/回測失敗進 exec_log 警告；`_log_warn` 附 cap 防膨脹
 
 `quant_fleet_server.py` 第 216 行 — Binance 封鎖/node 錯誤/DB 異常全無跡可尋。失敗寫 stderr/exec_log。
 

@@ -232,5 +232,39 @@ class ConcurrencyTests(unittest.TestCase):
         self.assertEqual(bad, [])
 
 
+class SaveSyntaxCheckTests(unittest.TestCase):
+    """D17 (M-10): /api/strategy/save must reject syntax-broken code with 400
+    (node --check) instead of persisting it and silently killing the poll loop."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ServerHarness()
+        st, _ = cls.srv.request("POST", "/api/strategy/create",
+                                json.dumps({"filename": "t_syn.js"}).encode())
+        assert st == 200
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.request("POST", "/api/strategy/t_syn.js/delete")
+        cls.srv.stop()
+
+    def _save(self, code):
+        return self.srv.request("POST", "/api/strategy/t_syn.js/save",
+                                json.dumps({"code": code}).encode())
+
+    def test_syntax_error_rejected(self):
+        st, body = self._save("function { this is not javascript")
+        self.assertEqual(st, 400, body)
+
+    def test_broken_object_literal_rejected(self):
+        st, body = self._save("({evaluate:function(){")
+        self.assertEqual(st, 400, body)
+
+    def test_valid_code_accepted(self):
+        st, body = self._save('NAME="t_syn";DESCRIPTION="x";'
+                              '({evaluate:function(){return{signal:"HOLD"};}})')
+        self.assertEqual(st, 200, body)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

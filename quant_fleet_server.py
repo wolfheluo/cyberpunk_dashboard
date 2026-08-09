@@ -8,6 +8,8 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import sys
+import tempfile
 import time
 import urllib.request
 import threading
@@ -122,6 +124,13 @@ def list_js_strategies():
 # Strategy state persisted server-side between polls (node processes are stateless)
 _strategy_state = {}
 
+def _log_warn(msg):
+    """Append a warning to the exec log (visible in the dashboard) with a cap."""
+    with log_lock:
+        exec_log.append({"ts": now_ts(), "html": f'<span style="color:#FFCC00">[warn]</span> {msg}'})
+        if len(exec_log) > 300:
+            del exec_log[:100]
+
 def run_js_strategy(strategy_file, ticker_infos):
     """Evaluate a JS strategy for all tickers via a node subprocess.
 
@@ -140,14 +149,23 @@ def run_js_strategy(strategy_file, ticker_infos):
                               text=True, timeout=15)
         out = proc.stdout.strip()
         if proc.returncode != 0 or not out:
+            # D17/M-10: node failure must be visible (was silent -> platform
+            # looked fine while strategies stayed HOLD)
+            _log_warn(f"strategy {strategy_file}: node exit={proc.returncode} "
+                      f"stderr={proc.stderr.strip()[:200] or 'empty'}")
             return {}
         data = json.loads(out)
         if "error" in data:
+            _log_warn(f"strategy {strategy_file}: {data['error']}")
             return {}
         if data.get("state") is not None:
             _strategy_state[strategy_file] = data["state"]
         return data.get("signals", {})
-    except Exception:
+    except FileNotFoundError:
+        _log_warn(f"strategy {strategy_file}: file not found")
+        return {}
+    except Exception as e:
+        _log_warn(f"strategy {strategy_file}: {e!r}")
         return {}
 
 def run_js_backtests(strategy_file, symbols_klines):
@@ -165,12 +183,16 @@ def run_js_backtests(strategy_file, symbols_klines):
                               text=True, timeout=120)
         out = proc.stdout.strip()
         if proc.returncode != 0 or not out:
+            _log_warn(f"backtest {strategy_file}: node exit={proc.returncode} "
+                      f"stderr={proc.stderr.strip()[:200] or 'empty'}")
             return {}
         data = json.loads(out)
         if isinstance(data, dict) and "error" in data:
+            _log_warn(f"backtest {strategy_file}: {data['error']}")
             return {}
         return data
-    except Exception:
+    except Exception as e:
+        _log_warn(f"backtest {strategy_file}: {e!r}")
         return {}
 
 # ============================================================
@@ -247,7 +269,9 @@ def fetch_json(url):
         req=urllib.request.Request(url,headers={"User-Agent":"QuantFleet/1.0"})
         with urllib.request.urlopen(req,timeout=10) as r:
             return json.loads(r.read().decode())
-    except: return None
+    except Exception as e:  # D17/N-9: failures must be observable, not swallowed
+        print(f"[fetch_json] {url}: {e!r}", file=sys.stderr)
+        return None
 
 # 24hr ticker is weight 40 per call — cache it too (1s polls would otherwise
 # blow the 1200 weight/min limit: 40*60 = 2400).
@@ -1131,6 +1155,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
                 new_code = body.get("code", "")
                 if new_code:
+                    # D17/M-10: syntax-check before persisting — a broken file
+                    # silently kills the poll loop (node eval fails every second)
+                    if HAS_NODE:
+                        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as tf:
+                            tf.write(new_code)
+                            tmp_path = tf.name
+                        try:
+                            chk = subprocess.run(["node", "--check", tmp_path],
+                                                 capture_output=True, text=True, timeout=10)
+                        finally:
+                            os.unlink(tmp_path)
+                        if chk.returncode != 0:
+                            self._json(400, {"error": "Syntax error: " +
+                                             (chk.stderr.strip()[:300] or "invalid JS")})
+                            return
                     with open(path, "w", encoding="utf-8") as f: f.write(new_code)
                     _strategy_state.pop(fname, None)  # strategy rewritten — drop stale state
                     name, _ = _strategy_meta(new_code)

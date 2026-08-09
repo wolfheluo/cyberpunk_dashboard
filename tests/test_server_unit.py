@@ -107,5 +107,39 @@ class ThreadSafetyTests(unittest.TestCase):
         self.assertEqual(errors, [])
 
 
+class ErrorVisibilityTests(unittest.TestCase):
+    """D17 (N-9/M-10): failures must be observable — fetch_json logs to
+    stderr, strategy/node failures append a warning to exec_log."""
+
+    def test_fetch_json_failure_writes_stderr(self):
+        import io as _io
+        from contextlib import redirect_stderr
+        buf = _io.StringIO()
+        # fetch_json is the original implementation here (import state or after
+        # SellSizePctTests.tearDownClass restored it) — it calls urlopen.
+        original_urlopen = srv.urllib.request.urlopen
+        srv.urllib.request.urlopen = lambda *a, **k: (_ for _ in ()).throw(OSError("boom"))
+        try:
+            with redirect_stderr(buf):
+                srv.fetch_json("http://x/api/v3/ticker/24hr")
+        finally:
+            srv.urllib.request.urlopen = original_urlopen
+        self.assertIn("boom", buf.getvalue())
+
+    def test_strategy_node_failure_appends_exec_log_warning(self):
+        import subprocess as sp
+        before = len(srv.exec_log)
+        real_run = srv.subprocess.run
+        srv.subprocess.run = lambda *a, **k: sp.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="SyntaxError: boom")
+        srv.HAS_NODE = True
+        try:
+            srv.run_js_strategy("fake.js", [{"id": "BTC"}])
+        finally:
+            srv.subprocess.run = real_run
+        self.assertGreater(len(srv.exec_log), before)
+        self.assertIn("fake.js", srv.exec_log[-1].get("html", ""))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
