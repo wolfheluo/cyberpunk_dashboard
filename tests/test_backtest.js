@@ -125,5 +125,27 @@ check('N-22: _run_strategy.js rejects traversal filename', !!evil.error, evil);
 const gridSrc = fs.readFileSync(path.join(ROOT, 'strategies', 'grid.js'), 'utf-8');
 check('N-24: grid.js has no g.last write-only state', !/\.last\s*=/.test(gridSrc));
 
+// ============================================================
+// M-9: grid recover must reverse-engineer levels from position size,
+// not reset to levels:1 (which drains the whole position on one close)
+// ============================================================
+(function () {
+  const strat = eval(gridSrc);  // grid.js is an object literal expression
+  strat.grids = {};             // state lost (server restart / save)
+  // 3 layers @ $100 on $10k: lots 2 + 2.5 + 3 = 7.5 units
+  const t = { id: 'BTC', price: 100, change_pct: 0, volume: 1,
+              high_24h: 101, low_24h: 99, pct_from_high: 0, pct_from_low: 0,
+              book: null,
+              position: { side: 'BUY', quantity: 7.5, entry_price: 100 },
+              portfolio: { cash: 10000, total_equity: 10000 } };
+  strat.evaluate(t, { closes: [100, 100, 100], rsi: 50, sma20: 100, sma50: 100,
+                      ema12: 100, ema26: 100, ema50: 100, macd_line: 0, macd_signal: 0,
+                      macd_hist: 0, bb_upper: 101, bb_middle: 100, bb_lower: 99,
+                      atr14: 0.5, rsi_4h: 50, sma_4h: 100, volSurge: false });
+  const g = strat.grids['BTC'];
+  check('M-9: recover infers ~3 grid levels from 7.5-unit position',
+        g && g.levels >= 3, g ? { levels: g.levels } : 'no grid state');
+})();
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

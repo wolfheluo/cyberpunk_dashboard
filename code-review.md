@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 29 | C-1 ~ C-5, M-1, M-2, M-4 ~ M-8, M-10, N-1 ~ N-5, N-8, N-9, N-11, N-14, N-15, N-22 ~ N-24, N-26, I-4, I-12 |
-| ⏳ 未修補（spec 已規劃未執行） | 21 | M-9, N-6, N-7, N-10, N-12, N-13, N-16 ~ N-20, N-25, N-27, I-1 ~ I-3, I-5 ~ I-8, I-13 |
+| ✅ 已修補（含測試證據） | 35 | C-1 ~ C-5, M-1, M-2, M-4 ~ M-10, N-1 ~ N-9, N-11 ~ N-15, N-22 ~ N-24, N-26, I-4, I-12 |
+| ⏳ 未修補（spec 已規劃未執行） | 15 | N-16 ~ N-20, N-25, N-27, I-1 ~ I-3, I-5 ~ I-8, I-13 |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
 | ✅ 設計維持 | 1 | I-11 |
@@ -141,7 +141,7 @@
 **修復**：backtestOne 實作 add/close_pct/size_pct 與 execute_trade 對齊
 
 ### M-9. grid 狀態遺失後 recover 整倉全平
-**修補狀態**：⏳ **未修補** — strategies/grid.js line 43 recover 分支仍 `levels: 1`（未依 position.quantity 反推）；spec 無對應 D 項（D6 覆蓋部分語義），需補
+**修補狀態**：✅ **已修補**（2026-08-09）— recover 依 position 市值/可用現金反推 levels（lotSize 累積逼近）；行為測試：7.5 單位持倉 → levels≥3（原本 1 → 一回 center 即 1/1 全平）；一併移除 `last` 死狀態
 
 **檔案**：`strategies/grid.js` 第 41 行
 **問題**：server 重啟/存檔清 _strategy_state → recover 分支設 levels=1 → 價格一回 center 即 close_pct=1/1 把累積多層倉位一次倒光
@@ -186,12 +186,12 @@
 `quant_fleet_server.py` 第 1030 行 — re-activate 帶回舊 state（grid 舊 idx 語意污染新邏輯）。activate 一併 pop。
 
 ### N-6. /api/portfolio 與 /api/data 權益計算不一致
-**修補狀態**：⏳ 未修補 — /api/portfolio（line 925）與 /api/data 權益計算仍不一致；spec D14 已規劃統一函式，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— `_position_value_now()` 用即時 24hr 價格（ticker 缺失才回退 entry）；測試：entry 50/即時 100 → pos value 200；兩端點同基準
 
 `quant_fleet_server.py` 第 925 行 — portfolio 用 re-mark 價、data 用即時價；current_price=0 時退化 entry。統一函式。
 
 ### N-7. 每秒全表 replay（效能）
-**修補狀態**：⏳ 未修補 — line 883 仍每 poll 全表 replay portfolio_stats；spec D15 已規劃增量維護，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— `portfolio_stats_cached()` 以 trades 筆數為 key 快取（未變重用）；測試：兩次呼叫僅 1 次重算
 
 `quant_fleet_server.py` 第 883 行 — portfolio_stats/equity_curve/rebuild_cycles 每次 poll 全表重播，O(n)/O(n²)；grid 高頻交易下 trades 快速累積。增量維護或緩存。
 
@@ -206,7 +206,7 @@
 `quant_fleet_server.py` 第 216 行 — Binance 封鎖/node 錯誤/DB 異常全無跡可尋。失敗寫 stderr/exec_log。
 
 ### N-10. 做空無曝險限制
-**修補狀態**：⏳ 未修補 — 做空無曝險限制（文件標註亦未做）；spec D21 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— 文件標註：execute_trade 註解 + 設計簡化（紙交易無保證金/強平，曝險僅受 cash 限制）
 
 `quant_fleet_server.py` 第 323 行 — cash 隨做空增長可無限疊加空倉。限制總曝險或文件標註。
 
@@ -216,12 +216,12 @@
 `quant_fleet_server.py` 第 308 行 — trades round(qty,8) 但 positions 原始浮點，加倉/部分平倉後微漂移。
 
 ### N-12. `_sma4h` 欄位標籤誤導
-**修補狀態**：⏳ 未修補 — line 829 `_sma4h` 仍取 `indicators["sma20"]`（1h 誤標 4h）；spec D21 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— `_sma4h` 改取真正的 `indicators.sma_4h`（4h SMA20，缺省回退 1h）；測試：4h klines=200 → _sma4h=200
 
 `quant_fleet_server.py` 第 829 行 — 實際為 1h SMA20 卻命名 sma4h。改傳 indicators['sma_4h'] 或改名。
 
 ### N-13. strategy_matrix 硬編碼第一個策略為 active
-**修補狀態**：⏳ 未修補 — line 863 仍 `active = (si == 0)` 硬編碼；spec D21 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— matrix active 改依 `meta["filename"] == active_strategy` 判定；測試：active_strategy=grid.js → 僅 Grid Trading 行 active
 
 `quant_fleet_server.py` 第 863 行 — `si==0` 與實際 active_strategy 無關，展示造假。
 

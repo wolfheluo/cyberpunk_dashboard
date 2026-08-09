@@ -20,6 +20,7 @@ _tmp = tempfile.TemporaryDirectory()
 os.environ["QF_DB_PATH"] = os.path.join(_tmp.name, "t.db")
 
 import quant_fleet_server as srv  # noqa: E402
+_real_execute_trade = srv.execute_trade  # captured before any test fakes it
 
 
 def _fake_klines(symbol, interval, limit=100, ttl=60):
@@ -332,6 +333,8 @@ class RoundingTests(unittest.TestCase):
     """N-11: positions quantity must be rounded like trades (no float drift)."""
 
     def setUp(self):
+        self._saved_exec = srv.execute_trade
+        srv.execute_trade = _real_execute_trade  # ensure we always call the real one
         with srv.db_lock:
             db = srv.get_db()
             db.execute("DELETE FROM trades")
@@ -340,6 +343,7 @@ class RoundingTests(unittest.TestCase):
             db.commit()
 
     def tearDown(self):
+        srv.execute_trade = self._saved_exec
         with srv.db_lock:
             db = srv.get_db()
             db.execute("DELETE FROM trades")
@@ -410,6 +414,95 @@ class StateMtimeTests(unittest.TestCase):
                                          "indicators": {"closes": [100] * 60}}])
         self.assertNotIn("FAKE2", json.dumps(srv._strategy_state.get("grid.js", {})),
                          "state must be reset when the strategy file changes")
+
+
+class PortfolioConsistencyTests(unittest.TestCase):
+    """N-6 + N-7: /api/portfolio valuation uses live prices (same base as
+    /api/data); portfolio_stats is cached by trades count (N-7 perf)."""
+
+    def setUp(self):
+        srv.active_strategy = "fake.js"
+        srv._last_signal = {}
+        srv._stats_cache = {"n": -1, "result": None}
+        self._saved = (srv.fetch_json, srv.fetch_klines_cached, srv.execute_trade)
+        srv.fetch_json = _fake_fetch_json
+        srv.fetch_klines_cached = _fake_klines
+        srv.execute_trade = lambda *a, **k: {"status": "filled"}
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.execute("UPDATE portfolio SET cash=10000 WHERE id=1")
+            db.execute("INSERT INTO positions (symbol,side,entry_price,quantity,"
+                       "current_price,unrealized_pnl,strategy) "
+                       "VALUES ('BTCUSDT','BUY',50,2,50,0,'t')")
+            db.commit()
+
+    def tearDown(self):
+        with srv.db_lock:
+            db = srv.get_db()
+            db.execute("DELETE FROM trades")
+            db.execute("DELETE FROM positions")
+            db.commit()
+        srv.fetch_json, srv.fetch_klines_cached, srv.execute_trade = self._saved
+
+    def test_position_value_uses_live_price(self):
+        # fake 24hr says BTCUSDT lastPrice=100 (entry was 50) -> pos value 2*100=200
+        v = srv._position_value_now()
+        self.assertEqual(v, 200.0, v)
+
+    def test_stats_cached_by_trade_count(self):
+        calls = {"n": 0}
+        real = srv.portfolio_stats
+        srv.portfolio_stats = lambda *a, **k: (calls.__setitem__("n", calls["n"] + 1) or (50.0, 1.2, -0.1))
+        try:
+            srv.portfolio_stats_cached()
+            srv.portfolio_stats_cached()
+        finally:
+            srv.portfolio_stats = real
+        self.assertEqual(calls["n"], 1, "same trade count must reuse the cache")
+
+
+class MatrixAndLabelTests(unittest.TestCase):
+    """N-13: strategy_matrix active cell must match the real active strategy;
+    N-12: _sma4h must carry the true 4h SMA."""
+
+    def setUp(self):
+        srv.active_strategy = "grid.js"
+        srv._last_signal = {}
+        self._saved = (srv.fetch_json, srv.fetch_klines_cached,
+                       srv.run_js_strategy, srv.execute_trade)
+        srv.fetch_json = _fake_fetch_json
+        srv.fetch_klines_cached = _fake_klines
+        srv.execute_trade = lambda *a, **k: {"status": "filled"}
+        with srv.db_lock:
+            srv.get_db().execute("DELETE FROM trades")
+            srv.get_db().commit()
+
+    def tearDown(self):
+        srv.fetch_json, srv.fetch_klines_cached, srv.run_js_strategy, srv.execute_trade = self._saved
+        with srv.db_lock:
+            srv.get_db().execute("DELETE FROM trades")
+            srv.get_db().commit()
+
+    def test_matrix_active_matches_active_strategy(self):
+        srv.run_js_strategy = lambda *a, **k: {"BTC": {"signal": "HOLD"}}
+        d = srv.fetch_all_data()
+        cells = d["strategy_matrix"]["cells"]
+        actives = {c[0] for c in cells if c[2] == "active"}
+        # grid.js is the active strategy; its name must be the active row
+        self.assertEqual(len(actives), 1, cells)
+        self.assertEqual(d["strategy_matrix"]["strategies"][list(actives)[0]], "Grid Trading")
+
+    def test_sma4h_is_real_4h_sma(self):
+        srv.run_js_strategy = lambda *a, **k: {"BTC": {"signal": "HOLD"}}
+        srv.fetch_klines_cached = lambda symbol, interval, limit=100, ttl=60: (
+            [[1_700_000_000_000 + i * 3_600_000, "100", "101", "99", "100", "1000000", 0]
+             for i in range(limit)] if interval == "1h" else
+            [[1_700_000_000_000 + i * 14_400_000, "200", "201", "199", "200", "1000000", 0]
+             for i in range(limit)])
+        d = srv.fetch_all_data()
+        self.assertEqual(d["tickers"][0]["_sma4h"], 200.0, d["tickers"][0]["_sma4h"])
 
 
 if __name__ == "__main__":

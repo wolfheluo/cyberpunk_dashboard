@@ -397,6 +397,8 @@ def execute_trade(symbol, side, price, strategy_name, signal_id=None, close_pct=
                                     (round(remain, 8), price, round((price - pos[2]) * remain, 8), symbol))
             else:
                 # ---- Open / add short ----
+                # N-10: paper trading has no margin/liquidation — short exposure
+                # is bounded only by cash; documented as a design simplification.
                 if cash < MIN_CASH:
                     return {"status": "rejected", "reason": "insufficient_funds"}
                 size = min(max(float(size_pct or TRADE_SIZE_PCT), 0.001), 0.5)
@@ -645,6 +647,34 @@ def portfolio_stats(initial_capital=INITIAL_CAPITAL):
             max_dd = dd if max_dd is None or dd > max_dd else max_dd
         max_dd = round(max_dd, 1) if max_dd is not None else None
     return win_rate, sharpe, max_dd
+
+# N-7: portfolio_stats replays the whole trades table — cache by trade count
+_stats_cache = {"n": -1, "result": None}
+def portfolio_stats_cached():
+    n = get_db().execute("SELECT COUNT(*) FROM trades").fetchone()[0]
+    if _stats_cache["n"] == n:
+        return _stats_cache["result"]
+    r = portfolio_stats(INITIAL_CAPITAL)
+    _stats_cache["n"] = n
+    _stats_cache["result"] = r
+    return r
+
+# N-6: position valuation must use live ticker prices — the same base the
+# dashboard (/api/data) uses, so the account page and the dashboard agree.
+# Falls back to the entry price only when the ticker is unavailable.
+def _position_value_now():
+    price_map = {}
+    raw = fetch_ticker24_cached()
+    if raw:
+        price_map = {t["symbol"]: float(t["lastPrice"]) for t in raw}
+    total = 0.0
+    for r in get_db().execute("SELECT symbol,side,entry_price,quantity FROM positions"):
+        px = price_map.get(r[0])
+        if px is None:
+            px = r[2] or 0.0
+        total += r[3] * px * (1 if r[1] == "BUY" else -1)
+    return total
+
 
 # ============================================================
 # MAIN DATA FETCH
@@ -904,7 +934,7 @@ def fetch_all_data():
             "portfolio": info["ticker"]["portfolio"],
             "sparkline": sparkline,
             "_rsi": round(info["indicators"]["rsi"], 1),
-            "_sma4h": round(info["indicators"]["sma20"], price < 1 and 4 or 2),
+            "_sma4h": round(info["indicators"].get("sma_4h") or info["indicators"]["sma20"], price < 1 and 4 or 2),
             "_vol_surge": info["indicators"]["volSurge"]
         })
 
@@ -935,13 +965,15 @@ def fetch_all_data():
         while len(exec_log)>200: exec_log.pop(0)
 
     # ---- KPI / Factors ----
-    strategy_names = [s["name"] for s in list_js_strategies()][:4]
+    strategy_metas = list_js_strategies()[:4]
+    strategy_names = [s["name"] for s in strategy_metas]
     timeframes_list = ["15m","1h","4h","1d"]
     cells=[]
-    for si,sn in enumerate(strategy_names):
-        for ti,tf in enumerate(timeframes_list):
-            active = (si == 0)  # first strategy active on all timeframes
-            cells.append([si,ti,"active" if active else "idle"])
+    for si, meta in enumerate(strategy_metas):
+        for ti, tf in enumerate(timeframes_list):
+            # N-13: the active row must match the real active strategy (by file)
+            active = (meta["filename"] == active_strategy)
+            cells.append([si, ti, "active" if active else "idle"])
 
     avg_rsi = sum(t["_rsi"] for t in result["tickers"])/max(len(result["tickers"]),1)
     price_above = sum(1 for t in result["tickers"] if t["price"]>t["_sma4h"])/max(len(result["tickers"]),1)
@@ -956,9 +988,9 @@ def fetch_all_data():
         {"label":"NEUTRAL","value":min(1.0,(len(result["tickers"])-buys-sells)/max(len(result["tickers"]),1))},
     ]
 
-    # Real portfolio KPI (None → frontend shows "--")
+    # Real portfolio KPI (None → frontend shows "--") — N-7: cached by trade count
     try:
-        win_rate, sharpe, max_dd = portfolio_stats(INITIAL_CAPITAL)
+        win_rate, sharpe, max_dd = portfolio_stats_cached()
     except Exception:
         win_rate = sharpe = max_dd = None
 
@@ -1000,8 +1032,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json(200,{"trades":[{"symbol":r[0],"side":r[1],"price":r[2],"quantity":r[3],"notional":r[4],"status":r[5],"strategy":r[6],"created_at":r[7]} for r in rows]})
         elif self.path=="/api/portfolio":
             pf = get_db().execute("SELECT cash,initial_capital FROM portfolio WHERE id=1").fetchone()
-            pos_val = sum(r[3]*(r[0] if r[0] else r[1]) * (1 if r[2] == "BUY" else -1)
-                           for r in get_db().execute("SELECT current_price,entry_price,side,quantity FROM positions").fetchall())
+            pos_val = _position_value_now()  # N-6: live prices, same base as /api/data
             self._json(200,{"cash":pf[0],"initial_capital":pf[1],"position_value":pos_val,
                             "total_equity":pf[0]+pos_val, "cycles": rebuild_cycles(),
                             "equity_curve": equity_curve()})

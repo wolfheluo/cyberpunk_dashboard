@@ -20,7 +20,7 @@
     // --- Flat: arm the grid; the first 0.1% move picks the direction ---
     if (!pos) {
       if (!g) {
-        this.grids[sym] = { center: price, step: price * this.GRID_STEP_PCT / 100, side: null, levels: 0, last: price };
+        this.grids[sym] = { center: price, step: price * this.GRID_STEP_PCT / 100, side: null, levels: 0 };
         return { signal: "HOLD", confidence: 50, factors: { action: "grid_arm", grid: 0 } };
       }
       var gp = Math.round((price - g.center) / g.step);
@@ -39,8 +39,19 @@
 
     // --- Position held (recover grid if the state was lost) ---
     if (!g || !g.side) {
+      // M-9: reverse-engineer the depth from the position size so a recovered
+      // grid drains level-by-level (1/levels) instead of dumping everything
+      // on the first recovery bar (close_pct 1/1).
+      var estLevels = 1, cumSize = this.lotSize(1);
+      var cash = (ticker.portfolio && ticker.portfolio.cash) || price;
+      var posValue = pos.quantity * price;
+      while (estLevels < this.GRID_LEVELS && cumSize * cash < posValue) {
+        estLevels++;
+        cumSize += this.lotSize(estLevels);
+      }
       this.grids[sym] = { center: price, step: price * this.GRID_STEP_PCT / 100,
-                          side: pos.side === "BUY" ? "long" : "short", levels: 1, last: price };
+                          side: pos.side === "BUY" ? "long" : "short",
+                          levels: estLevels };
       return { signal: "HOLD", confidence: 50, factors: { action: "grid_hold", grid: 0 } };
     }
     var gridPos = Math.round((price - g.center) / g.step);
