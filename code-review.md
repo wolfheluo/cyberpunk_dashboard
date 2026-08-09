@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 6 | C-1, C-2, M-5, M-6, M-7, N-15 |
-| ⏳ 未修補（spec 已規劃未執行） | 43 | C-4, C-5, M-1, M-2, M-4, M-8 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 8 | C-1, C-2, C-4, M-5, M-6, M-7, N-15, N-26 |
+| ⏳ 未修補（spec 已規劃未執行） | 41 | C-5, M-1, M-2, M-4, M-8 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -58,7 +58,7 @@
 **修復**（最優先）：`git checkout 82ef484^ -- strategies/default.js strategies/OBI.js strategies/ppmb.js` 恢復
 
 ### C-4. init_db.py 時間戳除錯 → 歷史資料全部落在 1970 年
-**修補狀態**：⏳ **未修補** — init_db.py line 122 仍 `int(row[0]) // 1_000_000`；spec D4 已規劃 `// 1000` + N-26 完整性判斷一併，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D4）— tests/test_initdb.py 6/6 綠：`_parse_klines_csv` 用已知 epoch 字面值驗證（1735689600000ms → 2025-01-01、1767225600000ms → 2026-01-01，絕非 1970）；N-26 一併：`_is_complete` 以「最大日期 ≥ 預期範圍」取代 `existing>300`（400 行舊資料但缺 2026-06 → 不視為完整，會補抓）
 
 **檔案**：`init_db.py` 第 122 行
 **問題**：`ts = int(row[0]) // 1_000_000` — Binance openTime 為毫秒（13 位數），應 `// 1000`；現行使 1735689600000 → 1735689 秒 = 1970-01-21
@@ -287,7 +287,7 @@
 `strategies/_run_backtest.js` 第 111 行 — change_pct 恆 0、portfolio.total_equity 範圍不同、volSurge 閾值不同。README 註明差異清單。
 
 ### N-26. init_db.py existing>300 跳過下載，缺檔不補
-**修補狀態**：⏳ 未修補 — init_db.py line 92 仍 `existing > 300` 跳過；spec D4 已規劃以最大日期判斷，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D4）— 同上：`_is_complete(conn, symbol)` 以最大日期判斷完整性；舊 heuristic（existing>300 跳過）已移除
 
 `init_db.py` 第 92 行 — 新上架幣種/失敗月份永不補抓。以最大日期判斷完整性。
 

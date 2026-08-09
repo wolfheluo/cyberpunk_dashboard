@@ -85,13 +85,41 @@ def init_db():
     return conn
 
 
+def _parse_klines_csv(symbol, rows_iter):
+    """Convert Binance kline CSV rows to DB tuples.
+
+    Binance openTime is milliseconds (13 digits); `// 1000` gives seconds.
+    (The old `// 1_000_000` bug pushed every date into January 1970 — D4/C-4.)
+    """
+    out = []
+    for row in rows_iter:
+        ts = int(row[0]) // 1000
+        date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        out.append((symbol, date_str,
+                    float(row[1]), float(row[2]), float(row[3]),
+                    float(row[4]), float(row[5])))
+    return out
+
+
+def _is_complete(conn, symbol):
+    """True when stored data reaches the expected history range (N-26).
+
+    Replaces the old `existing > 300` heuristic, which silently skipped
+    symbols whose cache was large but stale/incomplete (new listings, failed
+    months never backfilled).
+    """
+    last = conn.execute(
+        "SELECT MAX(date) FROM historical_klines WHERE symbol=?", (symbol,)).fetchone()[0]
+    if not last:
+        return False
+    return last[:7] >= f"{HIST_END[0]}-{HIST_END[1]:02d}"
+
+
 def download_historical(symbol):
     """Download and store historical daily klines for one symbol."""
     conn = sqlite3.connect(DB_PATH)
-    existing = conn.execute("SELECT COUNT(*) FROM historical_klines WHERE symbol=?",
-                            (symbol,)).fetchone()[0]
-    if existing > 300:
-        print(f"  {symbol}: {existing} rows cached, skipping")
+    if _is_complete(conn, symbol):
+        print(f"  {symbol}: complete, skipping")
         conn.close()
         return
 
@@ -119,12 +147,7 @@ def download_historical(symbol):
             try:
                 with zipfile.ZipFile(local) as z:
                     with z.open(z.namelist()[0]) as f:
-                        for row in csv.reader(io.TextIOWrapper(f)):
-                            ts = int(row[0]) // 1_000_000
-                            date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
-                            all_rows.append((symbol, date_str,
-                                float(row[1]), float(row[2]), float(row[3]),
-                                float(row[4]), float(row[5])))
+                        all_rows.extend(_parse_klines_csv(symbol, csv.reader(io.TextIOWrapper(f))))
             except Exception as e:
                 print(f"    parse error {fname}: {e}")
 
