@@ -16,7 +16,7 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
 <!-- TOP BAR -->
 <header class="flex items-center justify-between px-4 py-2 border-b border-[#1E222D] bg-[#0A0C12] shrink-0">
   <div class="flex items-center gap-4">
-    <span class="text-[#00E5FF] font-bold text-base tracking-wider glow-cyan">QUANT FLEET v2.5</span>
+    <span class="text-[#00E5FF] font-bold text-base tracking-wider glow-cyan" data-i18n="app_title">QUANT FLEET v2.5</span>
     <span class="text-[#5A6275] text-base">// WATCHLIST <span class="text-[#00E5FF]">[<span id="tickerCount">0</span>]</span></span>
   </div>
   <div class="flex items-center gap-4 text-base">
@@ -76,11 +76,11 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
             </div>
           </div>
           <div class="border-b border-[#1E222D] p-2" style="height:14%">
-            <div class="text-[12px] text-[#5A6275] mb-1">TRADE PIPELINE — signal → risk → order → fill → settle</div>
+            <div class="text-[12px] text-[#5A6275] mb-1" data-i18n="tr_pipeline">TRADE PIPELINE — signal → risk → order → fill → settle</div>
             <canvas id="pipelineCanvas" style="width:100%;height:100%"></canvas>
           </div>
           <div class="border-b border-[#1E222D] p-2" style="height:14%">
-            <div class="text-[12px] text-[#5A6275] mb-1"><span data-i18n="positions_title">POSITIONS</span> <span class="text-[#00FF66]">— Paper Trading</span></div>
+            <div class="text-[12px] text-[#5A6275] mb-1"><span data-i18n="positions_title">POSITIONS</span> <span class="text-[#00FF66]" data-i18n="paper_badge">— Paper Trading</span></div>
             <div id="positionsBar" class="flex gap-2 text-[11px] overflow-x-auto" style="max-height:52px"></div>
           </div>
           <div class="flex flex-1 overflow-hidden">
@@ -117,8 +117,8 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
           <div class="flex items-center justify-between mb-3">
             <span class="text-base text-[#00E5FF]" data-i18n="strategy_list_title">STRATEGY LIST</span>
             <div class="flex gap-2">
-              <button class="btn-sm primary" onclick="createStrategy()">+ NEW</button>
-              <a href="/api/params/ref" download class="btn-sm" style="text-decoration:none">📥 PARAMS</a>
+              <button class="btn-sm primary" onclick="createStrategy()" data-i18n="btn_new">+ NEW</button>
+              <a href="/api/params/ref" download class="btn-sm" style="text-decoration:none" data-i18n="btn_params">📥 PARAMS</a>
             </div>
           </div>
           <div id="strategyList" class="space-y-2"></div>
@@ -139,11 +139,11 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
     <!-- PAGE: Watchlist -->
     <div id="page-watchlist" class="page">
       <div class="p-4 overflow-y-auto flex-1">
-        <div class="text-base text-[#00E5FF] mb-3">WATCHLIST MANAGEMENT</div>
+        <div class="text-base text-[#00E5FF] mb-3" data-i18n="watchlist_mgmt">WATCHLIST MANAGEMENT</div>
         <div class="flex gap-2 mb-3">
           <input id="newSymbol" class="bg-[#0A0C12] border border-[#1E222D] text-[#c0c8d8] px-2 py-1 text-[12px] rounded w-32 font-mono" placeholder="DOGEUSDT" style="outline:none">
           <input id="newSymbolName" class="bg-[#0A0C12] border border-[#1E222D] text-[#c0c8d8] px-2 py-1 text-[12px] rounded w-28 font-mono" placeholder="Dogecoin" style="outline:none">
-          <button class="btn-sm primary" onclick="addSymbol()">+ ADD</button>
+          <button class="btn-sm primary" onclick="addSymbol()" data-i18n="btn_add">+ ADD</button>
         </div>
         <div id="symbolList" class="text-[12px] space-y-1 max-w-md"></div>
       </div>
@@ -155,19 +155,19 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
         <div class="w-[55%] overflow-y-auto p-3 border-r border-[#1E222D]">
           <div class="flex items-center justify-between mb-3">
             <span class="text-base text-[#00E5FF]" data-i18n="portfolio_summary">PORTFOLIO SUMMARY</span>
-            <button class="btn-sm danger" onclick="resetAccount()">↺ RESET</button>
+            <button class="btn-sm danger" onclick="resetAccount()" data-i18n="btn_reset">↺ RESET</button>
           </div>
           <div class="flex items-center gap-3 mb-3">
             <span class="text-[12px] text-[#5A6275]" data-i18n="active_strategy_label">Active Strategy:</span>
             <select class="strat-select" id="acctStrategySelect" onchange="activateStrategy(this.value)" style="max-width:250px">
-              <option value="">Loading...</option>
+              <option value="" data-i18n="loading">Loading...</option>
             </select>
           </div>
           <div id="accountSummary" class="grid grid-cols-4 gap-3 mb-4"></div>
           <div class="text-base text-[#00E5FF] mb-2" data-i18n="open_positions">OPEN POSITIONS</div>
-          <div id="accountPositions" class="mb-4"><div class="text-[#5A6275] text-[12px]">Loading...</div></div>
+          <div id="accountPositions" class="mb-4"><div class="text-[#5A6275] text-[12px]" data-i18n="loading">Loading...</div></div>
           <div class="text-base text-[#00E5FF] mb-2" data-i18n="trade_history">TRADE HISTORY</div>
-          <div id="accountTrades" class="text-[11px]"><div class="text-[#5A6275]">Loading...</div></div>
+          <div id="accountTrades" class="text-[11px]"><div class="text-[#5A6275]" data-i18n="loading">Loading...</div></div>
         </div>
         <div class="flex-1 flex flex-col p-3 overflow-hidden">
           <div class="text-base text-[#00E5FF] mb-2" data-i18n="equity_curve">EQUITY CURVE</div>
@@ -181,15 +181,15 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
       <div class="flex flex-1 overflow-hidden">
         <div class="w-[45%] border-r border-[#1E222D] overflow-y-auto p-3">
           <div class="mb-3">
-            <span class="text-base text-[#00E5FF]">BACKTEST (2025-01 → 2026-06, $10k)</span>
+            <span class="text-base text-[#00E5FF]" data-i18n="backtest_subtitle">BACKTEST (2025-01 → 2026-06, $10k)</span>
           </div>
           <div id="backtestStatus" class="text-[11px] text-[#FFCC00] mb-2"></div>
           <div id="backtestSummary">
-            <table class="bt-table" id="btTable"><thead><tr><th>Symbol</th><th>Strategy</th><th>Return</th><th>Final $</th><th>Trades</th></tr></thead><tbody><tr><td colspan="5" class="text-[#5A6275]">Press RUN BACKTEST to start</td></tr></tbody></table>
+            <table class="bt-table" id="btTable"><thead><tr><th data-i18n="col_symbol">Symbol</th><th data-i18n="col_strategy">Strategy</th><th data-i18n="col_return">Return</th><th data-i18n="col_final_equity">Final $</th><th data-i18n="col_trades">Trades</th></tr></thead><tbody><tr><td colspan="5" class="text-[#5A6275]" data-i18n="run_backtest_prompt">Press RUN BACKTEST to start</td></tr></tbody></table>
           </div>
         </div>
         <div class="flex-1 flex flex-col p-3 overflow-hidden">
-          <div class="text-base text-[#00E5FF] mb-2">EQUITY CURVES</div>
+          <div class="text-base text-[#00E5FF] mb-2" data-i18n="equity_curves">EQUITY CURVES</div>
           <div class="flex-1 flex items-center justify-center">
             <canvas id="btChart" class="w-full h-full"></canvas>
           </div>
@@ -208,11 +208,11 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
 <!-- Strategy name modal (replaces browser prompt) -->
 <div id="stratModal" class="modal-overlay" style="display:none">
   <div class="modal-panel">
-    <div class="text-[#00E5FF] text-[15px] mb-2 tracking-wider">NEW STRATEGY</div>
+    <div class="text-[#00E5FF] text-[15px] mb-2 tracking-wider" data-i18n="strat_modal_title">NEW STRATEGY</div>
     <input id="stratNameInput" class="modal-input" placeholder="my_strategy" value="new_strategy" spellcheck="false">
     <div class="flex gap-2 mt-3">
-      <button class="btn-sm primary" onclick="confirmCreateStrategy()">CREATE</button>
-      <button class="btn-sm" onclick="closeStratModal()">CANCEL</button>
+      <button class="btn-sm primary" onclick="confirmCreateStrategy()" data-i18n="btn_create">CREATE</button>
+      <button class="btn-sm" onclick="closeStratModal()" data-i18n="btn_cancel">CANCEL</button>
     </div>
   </div>
 </div>
