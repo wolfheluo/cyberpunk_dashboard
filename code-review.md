@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 9 | C-1, C-2, C-4, C-5, M-5, M-6, M-7, N-15, N-26 |
-| ⏳ 未修補（spec 已規劃未執行） | 40 | M-1, M-2, M-4, M-8 ~ M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
+| ✅ 已修補（含測試證據） | 10 | C-1, C-2, C-4, C-5, M-5, M-6, M-7, M-8, N-15, N-26 |
+| ⏳ 未修補（spec 已規劃未執行） | 39 | M-1, M-2, M-4, M-9, M-10, N-1 ~ N-14, N-16 ~ N-20, N-22 ~ N-25, N-27, I-1 ~ I-8, I-12, I-13 |
 | 🚫 設計決策：不恢復（配套待辦未完成） | 1 | C-3（active_strategy 仍 "default.js"、README 未更新） |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
@@ -134,7 +134,7 @@
 **修復**：加 .catch 以英文啟動 + 重試
 
 ### M-8. backtest 引擎不支援 add / close_pct / size_pct
-**修補狀態**：⏳ **未修補** — strategies/_run_backtest.js 無 add/close_pct/size_pct 處理（grep 零命中）；spec D6 已規劃與 execute_trade 對齊，未執行
+**修補狀態**：✅ **已修補**（2026-08-09，spec D6）— tests/test_backtest.js D6 4/4 綠（node seam）：size_pct 0.1 開倉（final 9900 vs 舊 9950）、close_pct 0.5 部分平倉（10037.5 vs 舊 10025）、add:true 同向加倉平均成本（trades 3 vs 舊 2）；backtestOne 交易區塊重寫為與 execute_trade 完全對齊（clamp 同 server：close_pct [0.01,1.0]、size_pct [0.001,0.5]）
 
 **檔案**：`strategies/_run_backtest.js` 第 128 行
 **問題**：add 無效（持倉時 BUY no-op）、close_pct 無效（一律全平）、size_pct 無效（固定 5%）

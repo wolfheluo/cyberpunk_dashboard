@@ -120,23 +120,45 @@ function backtestOne(strategy, symbol, klines) {
       }
     };
     let signal = 'HOLD';
+    let sig = {};
     try {
-      const out = strategy.evaluate(ticker, indicators) || {};
-      signal = out.signal || 'HOLD';
+      sig = strategy.evaluate(ticker, indicators) || {};
+      signal = sig.signal || 'HOLD';
     } catch (e) { /* per-bar errors are ignored, same as live trading */ }
+
+    // D6 (M-8): honour add / close_pct / size_pct — mirrors execute_trade semantics:
+    //   BUY  + short pos -> cover close_pct of it (default 1.0)
+    //   BUY  + long pos  -> add only when sig.add (average cost)
+    //   BUY  + flat      -> open long with sig.size_pct (default 5%)
+    //   SELL is symmetric (close long / add short / open short)
+    const clampCp = v => Math.min(Math.max(Number(v) || 1.0, 0.01), 1.0);
+    const clampSz = v => Math.min(Math.max(Number(v) || TRADE_SIZE_PCT, 0.001), 0.5);
 
     if (signal === 'BUY') {
       if (position && position.side === 'SELL') {
-        // Cover short (entire position; skip if insufficient cash)
-        const notional = position.qty * price;
+        // Cover short (partial when close_pct < 1; skip if insufficient cash)
+        const qty = position.qty * clampCp(sig.close_pct);
+        const notional = qty * price;
         if (notional <= cash) {
           cash -= notional;
-          position = null;
+          position.qty -= qty;
+          if (position.qty <= 1e-8) position = null;
+          tradeCount++; buyCount++;
+        }
+      } else if (position && position.side === 'BUY' && sig.add) {
+        // Add to long (average cost), same as execute_trade
+        const notional = Math.min(cash * clampSz(sig.size_pct), cash);
+        if (notional >= 10) {
+          const qty = notional / price;
+          cash -= notional;
+          const newQty = position.qty + qty;
+          position.entry = (position.entry * position.qty + price * qty) / newQty;
+          position.qty = newQty;
           tradeCount++; buyCount++;
         }
       } else if (!position) {
-        // Open long
-        const notional = Math.min(cash * TRADE_SIZE_PCT, cash);
+        // Open long with size_pct
+        const notional = Math.min(cash * clampSz(sig.size_pct), cash);
         if (notional >= 10) {
           const qty = notional / price;
           cash -= notional;
@@ -146,13 +168,27 @@ function backtestOne(strategy, symbol, klines) {
       }
     } else if (signal === 'SELL') {
       if (position && position.side === 'BUY') {
-        // Close long
-        cash += position.qty * price;
-        position = null;
+        // Close long (partial when close_pct < 1)
+        const qty = position.qty * clampCp(sig.close_pct);
+        const notional = qty * price;
+        cash += notional;
+        position.qty -= qty;
+        if (position.qty <= 1e-8) position = null;
         tradeCount++; sellCount++;
+      } else if (position && position.side === 'SELL' && sig.add) {
+        // Add to short (average cost)
+        const notional = Math.min(cash * clampSz(sig.size_pct), cash);
+        if (notional >= 10) {
+          const qty = notional / price;
+          cash += notional;
+          const newQty = position.qty + qty;
+          position.entry = (position.entry * position.qty + price * qty) / newQty;
+          position.qty = newQty;
+          tradeCount++; sellCount++;
+        }
       } else if (!position) {
-        // Open short: sell now, buy back later
-        const notional = Math.min(cash * TRADE_SIZE_PCT, cash);
+        // Open short with size_pct
+        const notional = Math.min(cash * clampSz(sig.size_pct), cash);
         if (notional >= 10) {
           const qty = notional / price;
           cash += notional;

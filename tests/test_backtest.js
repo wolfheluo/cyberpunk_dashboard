@@ -61,5 +61,54 @@ const resLong = runBacktest('t_always_buy.js', ALWAYS_BUY, symbols).BTC;
 check('C-5: long settlement still correct == 10050',
   resLong.final_equity === 10050, { final_equity: resLong.final_equity });
 
+// ============================================================
+// D6 (M-8): backtest must honour add / close_pct / size_pct like execute_trade
+// ============================================================
+
+// 1) size_pct scales the opening notional:
+//    short 10% of 10k = 1000 @100 -> qty 10, cash 11000; settle @110 -> -1100 -> 9900
+const flat = Array(30).fill(100).concat([100, 100, 100, 100, 110]);
+const r1 = runBacktest('t_size_pct.js',
+  '({evaluate:function(){return{signal:"SELL",size_pct:0.1};}})',
+  { BTC: synthKlines(35, flat) }).BTC;
+check('D6: size_pct 0.1 honoured (final_equity 9900)',
+  r1.final_equity === 9900, { final_equity: r1.final_equity });
+
+// 2) close_pct partial close + add:
+//    n1 SELL open @100 (qty5, cash10500)
+//    n2 BUY close_pct 0.5 @95  -> qty2.5, cash 10500-237.5 = 10262.5
+//    n3 BUY close rest @90     -> qty2.5, cash 10262.5-225 = 10037.5
+//    (old code ignored close_pct: n2 closed everything @95, n3 opened a long,
+//     final 10025 — distinguishable)
+const waves = Array(30).fill(100).concat([100, 95, 90, 90, 90, 90]);
+const r2 = runBacktest('t_partial.js',
+  `var n=0;
+  ({evaluate:function(){n++;
+    if(n===1)return{signal:"SELL"};
+    if(n===2)return{signal:"BUY",close_pct:0.5};
+    if(n===3)return{signal:"BUY"};
+    return{signal:"HOLD"};}})`,
+  { BTC: synthKlines(36, waves) }).BTC;
+check('D6: close_pct 0.5 partial close honoured (final_equity 10037.5)',
+  r2.final_equity === 10037.5, { final_equity: r2.final_equity });
+check('D6: three trades (open + 2 closes)',
+  r2.trades_count === 3, r2.trades_count);
+
+// 3) add: same-side signal with add:true adds to the position (avg cost)
+//    n1 SELL open @100 (qty5, cash10500); n2 SELL add @100 (qty5 -> qty10,
+//    cash 10500+500=11000); n3 BUY close all @100 -> cash 11000-1000 = 10000
+//    (old code: n2 was a no-op -> only open+close -> trades 2)
+const r3 = runBacktest('t_add.js',
+  `var n=0;
+  ({evaluate:function(){n++;
+    if(n===1)return{signal:"SELL"};
+    if(n===2)return{signal:"SELL",add:true};
+    if(n===3)return{signal:"BUY"};
+    return{signal:"HOLD"};}})`,
+  { BTC: synthKlines(35, flat) }).BTC;
+check('D6: add:true adds to position (3 trades, final 10000)',
+  r3.trades_count === 3 && r3.final_equity === 10000,
+  { trades: r3.trades_count, final_equity: r3.final_equity });
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
