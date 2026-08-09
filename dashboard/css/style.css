@@ -53,3 +53,8 @@ select.strat-select option{background:#0F1117;color:#c0c8d8}
 .btn-sm.primary{border-color:#00E5FF;color:#00E5FF;background:#00E5FF10}
 .btn-sm.danger{border-color:#FF2A6D;color:#FF2A6D}
 .btn-sm.danger:hover{background:#FF2A6D15}
+/* Strategy name modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(8,9,12,0.85);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal-panel{background:#0F1117;border:1px solid #1E222D;border-radius:6px;padding:20px;min-width:340px;box-shadow:0 0 24px rgba(0,229,255,0.12)}
+.modal-input{background:#0A0C12;border:1px solid #1E222D;color:#c0c8d8;padding:6px 10px;font-size:15px;font-family:"JetBrains Mono","Fira Code",monospace;width:100%;outline:none;border-radius:3px}
+.modal-input:focus{border-color:#00E5FF}

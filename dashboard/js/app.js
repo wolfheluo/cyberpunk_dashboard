@@ -65,14 +65,26 @@ function openStrategy(fname){
   });
 }
 function createStrategy(){
-  var name=prompt('Strategy filename (e.g. my_strategy.js):','new_strategy.js');
+  document.getElementById('stratModal').style.display='flex';
+  var inp=document.getElementById('stratNameInput');
+  inp.value='new_strategy.js';
+  setTimeout(function(){inp.focus();inp.select();},50);
+}
+function closeStratModal(){document.getElementById('stratModal').style.display='none';}
+function confirmCreateStrategy(){
+  var name=document.getElementById('stratNameInput').value.trim();
   if(!name)return;
+  closeStratModal();
   fetch('/api/strategy/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:name})})
     .then(function(r){return r.json();}).then(function(d){
       if(d.error){alert(d.error);return;}
       loadStrategies();loadStrategyList();openStrategy(d.filename);
     });
 }
+document.getElementById('stratNameInput').addEventListener('keydown',function(e){
+  if(e.key==='Enter')confirmCreateStrategy();
+  if(e.key==='Escape')closeStratModal();
+});
 function deleteStrategy(fname){
   if(fname===activeStratFile){alert('Cannot delete active strategy. Switch first.');return;}
   if(!confirm('Delete '+fname+'?'))return;
