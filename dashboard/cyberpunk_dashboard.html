@@ -17,13 +17,13 @@ tailwind.config = {theme:{extend:{fontFamily:{mono:["JetBrains Mono","Fira Code"
 <header class="flex items-center justify-between px-4 py-2 border-b border-[#1E222D] bg-[#0A0C12] shrink-0">
   <div class="flex items-center gap-4">
     <span class="text-[#00E5FF] font-bold text-base tracking-wider glow-cyan" data-i18n="app_title">QUANT FLEET v2.5</span>
-    <span class="text-[#5A6275] text-base">// WATCHLIST <span class="text-[#00E5FF]">[<span id="tickerCount">0</span>]</span></span>
+    <span class="text-[#5A6275] text-base"><span data-i18n="watchlist">// WATCHLIST</span> <span class="text-[#00E5FF]">[<span id="tickerCount">0</span>]</span></span>
   </div>
   <div class="flex items-center gap-4 text-base">
     <button class="lang-btn active" onclick="I18n.setLang('en')" id="btnEN">EN</button>
     <button class="lang-btn" onclick="I18n.setLang('zh')" id="btnZH">中文</button>
     <span class="text-[#5A6275]"><span data-i18n="lat">LAT</span> <span class="text-[#00E5FF]" id="latency">--</span></span>
-    <span id="statusBar" class="text-[#FFCC00]" style="font-size:11px">Initializing...</span>
+    <span id="statusBar" class="text-[#FFCC00]" style="font-size:11px" data-i18n="initializing">Initializing...</span>
     <span><span id="liveDot" class="dot-cyan"></span><span id="liveStatus" class="text-[#00E5FF]" data-i18n="connecting">CONNECTING</span></span>
   </div>
 </header>

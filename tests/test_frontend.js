@@ -99,6 +99,41 @@ check('pipeline uses index comparison, not label', !/nd\.label==='SIGNAL'/.test(
 check('I-4: no no-op newline replace remains', !/replace\(\/\\\\n\/g/.test(src) && !/replace\(\/\\n\/g/.test(src),
   'found replace(/\\n/g) residue');
 
+// ---- Batch 4d frontend guards ----
+// N-16: WS streams reconnect independently with exponential backoff
+check('N-16: WS reconnect uses exponential backoff per stream',
+  /Math\.min\(60000,\s*1000\s*\*\s*Math\.pow\(2,/.test(src) || /Math\.pow\(2,wsReconnect/.test(src));
+// N-17: live WS ticks must not overwrite signals (server /api/data is the source of truth)
+const updIdx = src.indexOf('function updatePrices(){');
+const updBody = src.slice(updIdx, updIdx + 900);
+check('N-17: updatePrices does not overwrite signals', !/\.signal=s\.signal/.test(updBody));
+// N-18: rail price spans carry a data-price attribute; updater uses it, not span order
+check('N-18: rail price span has data-price attr', src.includes('data-price="1"'));
+check('N-18: updateRailPrices uses [data-price]', !/spans\[spans\.length-2\]/.test(src));
+// N-19: loadAccount has a .catch
+const laIdx = src.indexOf('function loadAccount(){');
+const laEnd = src.indexOf('function drawAccountChart');
+check('N-19: loadAccount has .catch fallback', laIdx !== -1 && src.slice(laIdx, laEnd).includes('.catch('));
+// N-20: hardcoded English moved to i18n
+check('N-20: resetAccount confirm uses i18n key', src.includes("I18n.t('confirm_reset'"));
+check('N-20: Vol label uses i18n', !/\'Vol \'\+/.test(src));
+// I-3: setLang syncs <html lang> and title
+check('I-3: setLang syncs documentElement.lang', src.includes("document.documentElement.lang=ln"));
+check('I-3: setLang syncs title', src.includes("document.title=I18n.t('app_title')"));
+// I-6: boot call site does not fetch the active strategy twice
+check('I-6: boot call site fetches strategy once',
+  !/I18n\.init\(\)\.then\(function\(\)\{loadStrategies\(\);loadActiveJSStrategy\(\)/.test(src));
+// I-7: radar animation pauses off-dashboard like the pipeline
+const radarIdx = src.indexOf('function animateRadarPulse(){');
+check('I-7: radar animation checks currentPage', src.slice(radarIdx, radarIdx + 300).includes("currentPage!=='dashboard'"));
+// I-8 + N-20 keys: no ${param} convention; confirm_reset present; en/zh aligned
+const enJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'dashboard', 'i18n', 'en.json'), 'utf-8'));
+const zhJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'dashboard', 'i18n', 'zh.json'), 'utf-8'));
+check('I-8: no ${param} convention in i18n files',
+  !JSON.stringify(enJson).includes('${') && !JSON.stringify(zhJson).includes('${'));
+check('N-20: confirm_reset key exists in both languages', !!enJson.confirm_reset && !!zhJson.confirm_reset);
+check('I-2 (partial): en/zh key sets aligned', Object.keys(enJson).length === Object.keys(zhJson).length);
+
 // ---- D19 (M-7): I18n.init must RESOLVE even when language files fail to load ----
 // Behavioural test: stub fetch to always reject, boot the I18n module in a vm,
 // and require init() to settle successfully (dashboard boot continues in
@@ -125,7 +160,7 @@ check('I-4: no no-op newline replace remains', !/replace\(\/\\\\n\/g/.test(src) 
   }
   // Static guard: the boot call site must also have a catch fallback
   check('D19: boot call site has .catch fallback',
-    /I18n\.init\(\)\.then\(function\(\)\{loadStrategies\(\);loadActiveJSStrategy\(\);R\(\);fetchData\(\);\}\)\.catch/.test(src));
+    /I18n\.init\(\)\.then\(function\(\)\{loadStrategies\(\);R\(\);fetchData\(\);\}\)\.catch/.test(src));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

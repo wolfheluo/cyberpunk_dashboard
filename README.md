@@ -198,6 +198,20 @@ close_pct, add}`.
 `grid.js` is included as a reference implementation (symmetric long/short
 grid, ±10% band at 0.1% per level).
 
+### Backtest vs Live Differences (N-25)
+
+Backtests replay **daily** klines through the same `evaluate()` path as live
+trading, with these documented differences:
+
+| Input | Backtest | Live |
+|-------|----------|------|
+| `change_pct` | always 0 | real 24h change |
+| `high_24h` / `low_24h` | day's range | real 24h range |
+| `book` | `null` | real order book |
+| `volSurge` | volume > 0 | 1.5x recent 1h average |
+| `rsi_4h` / `sma_4h` | mirrors daily series | real 4h closes |
+| position/portfolio | tracked inside the backtest | live paper account |
+
 ---
 
 ## Backtesting

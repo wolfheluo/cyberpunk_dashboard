@@ -16,6 +16,9 @@ function I(){
 }
 return{init:I,t:T,setLang:function(ln){
   l=ln;
+  document.documentElement.lang=ln; // I-3
+  document.title=I18n.t('app_title'); // I-3
+  var ce=document.getElementById('codeEditor');if(ce)ce.placeholder=I18n.t('select_strategy_placeholder'); // N-20
   document.getElementById('btnEN').className='lang-btn'+(ln==='en'?' active':'');
   document.getElementById('btnZH').className='lang-btn'+(ln==='zh'?' active':'');
   B();
@@ -279,7 +282,7 @@ function renderTickerRail(){
   DATA.tickers.forEach(function(tk,i){
     var chg=parseFloat(tk.change_pct)||0,sign=chg>=0?'+':'',cc=chg>0?'up':chg<0?'down':'neutral';
     var card=document.createElement('div');card.className='panel p-2 cursor-pointer hover:border-[#00E5FF40] transition-colors';
-    card.innerHTML='<div class="flex justify-between items-center mb-1"><div><span class="text-[#00E5FF] text-[15px] font-bold">'+esc(tk.id)+'</span><span class="text-[#5A6275] text-[15px] ml-1.5">'+esc(tk.name||'')+'</span></div><span class="text-[#5A6275] text-[15px]">Vol '+(tk.volume_m!=null?Number(tk.volume_m).toFixed(1)+'M':'--')+'</span></div><canvas class="w-full sparkline" height="20" data-idx="'+i+'" style="width:100%"></canvas><div class="flex justify-between mt-0.5"><span class="text-[15px]">'+(tk.price!=null?'$'+Number(tk.price).toFixed(tk.price<1?4:2):'--')+'</span><span class="'+cc+' text-[15px]">'+sign+Math.abs(chg).toFixed(2)+'%</span></div>';
+    card.innerHTML='<div class="flex justify-between items-center mb-1"><div><span class="text-[#00E5FF] text-[15px] font-bold">'+esc(tk.id)+'</span><span class="text-[#5A6275] text-[15px] ml-1.5">'+esc(tk.name||'')+'</span></div><span class="text-[#5A6275] text-[15px]">'+I18n.t('vol')+' '+(tk.volume_m!=null?Number(tk.volume_m).toFixed(1)+'M':'--')+'</span></div><canvas class="w-full sparkline" height="20" data-idx="'+i+'" style="width:100%"></canvas><div class="flex justify-between mt-0.5"><span class="text-[15px] price" data-price="1">'+(tk.price!=null?'$'+Number(tk.price).toFixed(tk.price<1?4:2):'--')+'</span><span class="'+cc+' text-[15px]">'+sign+Math.abs(chg).toFixed(2)+'%</span></div>';
     rail.appendChild(card);
   });
   setTimeout(drawSparklines,50);
@@ -305,6 +308,7 @@ function renderRadar(){
 
 var radarPulseR=0,radarAnimId=null;
 function animateRadarPulse(){
+  if(currentPage!=='dashboard'){radarAnimId=null;return;} // I-7: pause while off-page
   radarPulseR=(radarPulseR+0.08)%(Math.PI*2);
   renderRadar(radarPulseR);
   radarAnimId=requestAnimationFrame(animateRadarPulse);
@@ -481,34 +485,38 @@ function renderExecLog(){
 // Two separate raw streams: !bookTicker does NOT deliver in a combined
 // stream (verified against the API), so they cannot share one connection.
 var binanceWS=null,bookWS=null,wsPrices={},wsBook={};
-function connectBinanceWS(){
-  if(binanceWS)try{binanceWS.close();}catch(e){}
-  binanceWS=new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
-  binanceWS.onmessage=function(e){
-    try{
-      var data=JSON.parse(e.data);
-      if(Array.isArray(data)){
-        data.forEach(function(t){wsPrices[t.s]={price:parseFloat(t.c),high:parseFloat(t.h),low:parseFloat(t.l)};});
-        updatePrices();
-      }
-    }catch(ex){}
-  };
-  binanceWS.onclose=function(){setTimeout(connectBinanceWS,5000);};
-  binanceWS.onerror=function(){binanceWS.close();};
-
-  if(bookWS)try{bookWS.close();}catch(e){}
-  bookWS=new WebSocket('wss://stream.binance.com:9443/ws/!bookTicker');
-  bookWS.onmessage=function(e){
-    try{
-      var t=JSON.parse(e.data);
-      if(t&&t.s){
-        wsBook[t.s]={best_bid:parseFloat(t.b),best_ask:parseFloat(t.a),bid_qty:parseFloat(t.B),ask_qty:parseFloat(t.A)};
-      }
-    }catch(ex){}
-  };
-  bookWS.onclose=function(){setTimeout(connectBinanceWS,5000);};
-  bookWS.onerror=function(){bookWS.close();};
+// N-16: each stream reconnects on its own with exponential backoff — a dead
+// bookTicker feed must not tear down the healthy miniTicker connection.
+var wsReconnect={binance:0,book:0};
+function wsConnect(kind){
+  var url=kind==='binance'?'wss://stream.binance.com:9443/ws/!miniTicker@arr':'wss://stream.binance.com:9443/ws/!bookTicker';
+  var ws=new WebSocket(url);
+  if(kind==='binance')binanceWS=ws;else bookWS=ws;
+  ws.onopen=function(){wsReconnect[kind]=0;};
+  ws.onclose=function(){wsReconnect[kind]++;setTimeout(function(){wsConnect(kind);},Math.min(60000,1000*Math.pow(2,wsReconnect[kind])));};
+  ws.onerror=function(){try{ws.close();}catch(e){}};
+  if(kind==='binance'){
+    ws.onmessage=function(e){
+      try{
+        var data=JSON.parse(e.data);
+        if(Array.isArray(data)){
+          data.forEach(function(t){wsPrices[t.s]={price:parseFloat(t.c),high:parseFloat(t.h),low:parseFloat(t.l)};});
+          updatePrices();
+        }
+      }catch(ex){}
+    };
+  }else{
+    ws.onmessage=function(e){
+      try{
+        var t=JSON.parse(e.data);
+        if(t&&t.s){
+          wsBook[t.s]={best_bid:parseFloat(t.b),best_ask:parseFloat(t.a),bid_qty:parseFloat(t.B),ask_qty:parseFloat(t.A)};
+        }
+      }catch(ex){}
+    };
+  }
 }
+function connectBinanceWS(){wsConnect('binance');wsConnect('book');}
 var _priceBuffer={};
 function updateRailPrices(){
   // Surgical DOM update of the ticker rail price spans (no full redraw).
@@ -517,10 +525,8 @@ function updateRailPrices(){
   if(!DATA.tickers.length)return;
   var cards=document.querySelectorAll('#tickerRail .panel');
   for(var i=0;i<cards.length&&i<DATA.tickers.length;i++){
-    var tk=DATA.tickers[i],spans=cards[i].querySelectorAll('span');
-    if(spans.length>=2){
-      spans[spans.length-2].textContent='$'+Number(tk.price).toFixed(tk.price<1?4:2);
-    }
+    var tk=DATA.tickers[i],ps=cards[i].querySelector('[data-price]');
+    if(ps)ps.textContent='$'+Number(tk.price).toFixed(tk.price<1?4:2);
   }
 }
 function updatePrices(){
@@ -536,13 +542,8 @@ function updatePrices(){
     }
   }
   updateRailPrices();
-  // Re-evaluate strategies on every price update
-  if(activeJSStrategy){
-    for(var i=0;i<DATA.tickers.length;i++){
-      var s=evaluateJSStrategy(DATA.tickers[i]);
-      DATA.tickers[i].signal=s.signal;DATA.tickers[i].confidence=s.confidence;
-    }
-  }
+  // N-17: signals come from the server scan (/api/data) — live WS ticks only
+  // move prices. Client-side re-evaluation drifted from what actually executed.
   if(DATA.tickers.length&&currentPage==='dashboard')R(false);
 }
 
@@ -604,6 +605,8 @@ function fetchData(){
   var start=Date.now();
   Promise.all([fetch('/api/data').then(function(r){return r.json();}),fetch('/api/positions').then(function(r){return r.json();}),fetch('/api/trades').then(function(r){return r.json();})])
     .then(function(results){var data=results[0],pos=results[1],trades=results[2],latency=Date.now()-start;
+      // I-5: merge only keys DATA already declares — new server fields must be
+      // added to DATA in this file explicitly; unknown keys are dropped on purpose.
       for(var k in data){if(DATA.hasOwnProperty(k))DATA[k]=data[k];}DATA.positions=pos.positions||[];DATA.trades=trades.trades||[];DATA.connected=true;DATA.latency_ms=latency;
       var tc=document.getElementById('tickerCount');if(tc)tc.textContent=DATA.tickers.length;
       var cp=document.getElementById('cliPrompt');if(cp)cp.textContent=I18n.t('cli_scan')+' '+DATA.tickers.map(function(t){return t.id;}).join(' ');
@@ -673,6 +676,9 @@ function loadAccount(){
 
     // Equity curve from trades
     drawAccountChart(pf.equity_curve||[],initCap);
+  }).catch(function(){ // N-19: never white-screen on a bad /api/portfolio response
+    var el=document.getElementById('accountSummary');
+    if(el)el.innerHTML='<div class="text-[#FF2A6D]">'+I18n.t('err_prefix')+I18n.t('api_error')+'</div>';
   });
 }
 
@@ -770,7 +776,7 @@ function addSymbol(){
     });
 }
 function resetAccount(){
-  if(!confirm('Reset account to $10,000? This clears all trades and positions.'))return;
+  if(!confirm(I18n.t('confirm_reset')))return;
   fetch('/api/reset',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
     alert(I18n.t('alert_reset',{cap:d.capital.toLocaleString()}));
     loadAccount();
@@ -788,7 +794,7 @@ loadAccount=function(){
 };
 
 R();animateRadarPulse();
-connectBinanceWS();I18n.init().then(function(){loadStrategies();loadActiveJSStrategy();R();fetchData();}).catch(function(){loadStrategies();loadActiveJSStrategy();R();fetchData();});
+connectBinanceWS();I18n.init().then(function(){loadStrategies();R();fetchData();}).catch(function(){loadStrategies();R();fetchData();});
 // Browsers throttle background-tab timers (setTimeout → ~1/min), which stalls
 // polling, prices and strategy execution while the tab is hidden. Jump back to
 // the foreground → fetch immediately instead of waiting for the throttled timer.

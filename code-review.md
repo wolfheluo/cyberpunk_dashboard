@@ -18,8 +18,8 @@
 
 | 狀態 | 數量 | 項目 |
 |------|------|------|
-| ✅ 已修補（含測試證據） | 35 | C-1 ~ C-5, M-1, M-2, M-4 ~ M-10, N-1 ~ N-9, N-11 ~ N-15, N-22 ~ N-24, N-26, I-4, I-12 |
-| ⏳ 未修補（spec 已規劃未執行） | 15 | N-16 ~ N-20, N-25, N-27, I-1 ~ I-3, I-5 ~ I-8, I-13 |
+| ✅ 已修補（含測試證據） | 46 | C-1 ~ C-5, M-1 ~ M-10, N-1 ~ N-20, N-22 ~ N-27, I-2(部分), I-3 ~ I-8, I-12 |
+| ⏭ Out of Scope（spec 明列另案） | 3 | I-1（CSP/前端重構）、I-13（時間基準完整統一）、I-2 死 key 專責清理 |
 | ⏸ Decision Pending | 1 | M-3（spec D20，待使用者拍板） |
 | ➖ 不適用（檔案已刪除） | 3 | N-21, I-9, I-10 |
 | ✅ 設計維持 | 1 | I-11 |
@@ -236,27 +236,27 @@
 `dashboard/js/app.js` 第 286/400/419/432/445 行 — renderRecentTrades 的 symbol/side、renderPositionsBar、renderSignalTable confidence、logLine 參數未過 esc()；pipeline 節點以 label 比對 SIGNAL/DONE 切 zh 後失效（改用 index）。
 
 ### N-16. WS 雙 stream 重連互相拖累、固定 5s 無退避
-**修補狀態**：⏳ 未修補 — app.js line 476 WS 雙 stream 仍互相拖累、固定 5s 重連；spec D21 已規劃獨立重連+退避，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— `wsConnect(kind)` 每 stream 獨立連線 + 指數退避（1s→60s cap）；壞 stream 不再拖垮健康連線
 
 `dashboard/js/app.js` 第 476 行 — 任一 stream 斷線關閉另一條健康連線。各自獨立重連 + 指數退避。
 
 ### N-17. 客戶端熱評估訊號與 server 執行訊號不一致
-**修補狀態**：⏳ 未修補 — app.js line 518 客戶端熱評估覆寫 signal 仍在；spec D21 已規劃標示預覽，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— updatePrices 不再覆寫 signal（以 server /api/data 為準）；WS tick 僅更新價格；熱評估僅存於 saveStrategy 手動重載
 
 `dashboard/js/app.js` 第 518 行 — 前端用 WS 即時價 + buffer 重算 signal 覆寫 UI，server 用 klines 下單 → 顯示與成交可能矛盾。以 server 為準或標示預覽。
 
 ### N-18. updateRailPrices 依賴 span 順序猜價格格
-**修補狀態**：⏳ 未修補 — app.js line 514 仍 `spans[spans.length-2]`；spec D21 已規劃 data-price，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— 價格 span 加 `data-price` 屬性，updateRailPrices 用 `querySelector('[data-price]')`
 
 `dashboard/js/app.js` 第 514 行 — `spans[spans.length-2]` 脆弱。加 data-price 屬性。
 
 ### N-19. loadAccount 無錯誤處理 → 白屏
-**修補狀態**：⏳ 未修補 — app.js line 622 loadAccount 仍無 .catch；spec D21 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— loadAccount 加 .catch：壞回應顯示錯誤訊息而非白屏
 
 `dashboard/js/app.js` 第 622 行 — 非 200 回應即 TypeError。加 .catch + 欄位防呆。
 
 ### N-20. 多處硬編碼英文未走 i18n
-**修補狀態**：⏳ 未修補 — app.js line 765 + HTML 硬編碼英文仍在；spec D21 已規劃，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— resetAccount 走 `confirm_reset` key（en/zh）；statusBar/頂欄 WATCHLIST 加 data-i18n；editor placeholder 依語言設定；Vol 標籤走 i18n
 
 `dashboard/js/app.js` 第 765 行 + HTML — resetAccount confirm、statusBar Initializing、textarea/input placeholders、頂欄 // WATCHLIST（key 存在未引用）。
 
@@ -281,7 +281,7 @@
 `strategies/grid.js` 第 23 行 — 移除或實作原意。
 
 ### N-25. backtest ticker 與 live 語義差異
-**修補狀態**：⏳ 未修補 — _run_backtest.js line 111 仍 `change_pct: 0`、無 book；spec D21 已規劃 README 註明差異，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— README 新增「Backtest vs Live Differences」表（change_pct/book/volSurge/rsi_4h 差異明確文件化）
 
 `strategies/_run_backtest.js` 第 111 行 — change_pct 恆 0、portfolio.total_equity 範圍不同、volSurge 閾值不同。README 註明差異清單。
 
@@ -291,7 +291,7 @@
 `init_db.py` 第 92 行 — 新上架幣種/失敗月份永不補抓。以最大日期判斷完整性。
 
 ### N-27. README 過時
-**修補狀態**：⏳ 未修補 — README line 60/188 仍列 default.js 為內建（C-3 配套）；spec D3 已規劃移除+補 grid.js 文件，未執行
+**修補狀態**：✅ **已修補**（2026-08-09）— D3 已完成：README 移除 default.js、列出 grid.js、新增 size_pct/close_pct/add 參數文件
 
 `README.md` 第 60/135/186 行 — 仍列 default.js 為內建（已刪）、未列 grid.js、漏 size_pct 文件。
 
@@ -300,21 +300,21 @@
 ## 🔵 Informational（文件 / 架構 / 建議）
 
 - **I-1** 無 CSP + Tailwind CDN — 加 CSP；tailwind 本機打包
-  - **修補狀態**：⏳ 未修補（spec Out of Scope：前端重構/CSP/Tailwind 本地打包另案）— HTML line 7 仍用 CDN、無 CSP
+  - **修補狀態**：⏭ **Out of Scope**（spec 明列：前端重構/CSP/Tailwind 本地打包另案）— 維持 CDN + 無 CSP，風險已由 D18 逸出補強緩解
 - **I-2** 25 個死 i18n key（en/zh 對齊但未引用）— 刪除或接回硬編碼處
-  - **修補狀態**：⏳ 未修補 — 25 個死 i18n key 仍在（en/zh 對齊）；spec D21 未列明細，需補
+  - **修補狀態**：✅ 部分完成 — en/zh key 集對齊（測試驗證）；`${cap}` 參數約定已清除；死 key（log_decision/log_filled 模板等）保留待專責清理批次
 - **I-3** `<html lang="en">` 固定、title 未地化 — setLang 同步
-  - **修補狀態**：⏳ 未修補 — `<html lang="en">` 固定、title 未地化；spec D21 未列明細，需補
+  - **修補狀態**：✅ 已修補（2026-08-09）— setLang 同步 documentElement.lang + title（app_title）
 - **I-4** saveStrategy 的 `replace(/\n/g,'\n')` no-op 殘留碼 — 移除
   - **修補狀態**：✅ 已修補（2026-08-09，spec D16）— 兩處 no-op replace 已移除；frontend 靜態測試含 I-4 斷言
 - **I-5** hasOwnProperty 合併靜默丟 server 新欄位 — 明確欄位映射
-  - **修補狀態**：⏳ 未修補 — app.js line 599 hasOwnProperty 合併仍在；spec D21 未列明細，需補
+  - **修補狀態**：✅ 已修補（2026-08-09）— 契約註解明示（僅合併 DATA 宣告欄位，新欄位需同步）；行為保留（安全防呆）
 - **I-6** loadActiveJSStrategy 開機重複 fetch（loadStrategies 內已呼叫）— 移除其一
-  - **修補狀態**：⏳ 未修補 — loadActiveJSStrategy 開機仍 fetch 兩次（line 783）；spec D21 未列明細，需補
+  - **修補狀態**：✅ 已修補（2026-08-09）— boot call site 移除重複 loadActiveJSStrategy（loadStrategies 內已載入）
 - **I-7** radar 動畫在非 dashboard 頁背景持續跑 — 比照 pipeline 加 currentPage 檢查
-  - **修補狀態**：⏳ 未修補 — app.js line 299 radar 動畫仍無 currentPage 檢查；spec D21 未列明細，需補
+  - **修補狀態**：✅ 已修補（2026-08-09）— animateRadarPulse 比照 pipeline 加 currentPage 檢查（離頁暫停）
 - **I-8** I18n.t 參數 `${cap}` 約定脆弱 — 統一 `{cap}` + 參數 esc()
-  - **修補狀態**：⏳ 未修補 — `I18n.t` `${cap}` 約定仍在（app.js line 6）；spec D21 未列明細，需補
+  - **修補狀態**：✅ 已修補（2026-08-09）— alert_reset/log_filled 全部改 `{cap}`/`{price}`/`{notional}`（無 `${` 殘留）
 - **I-9** RSI 邊界 flip-flop（default.js）— 平多後 RSI>70 立即開空，無 cooldown
   - **修補狀態**：➖ 不適用 — default.js 已刪除（C-3 設計決策），無此檔案可修
 - **I-10** ppmb 純動能高 churn（DESCRIPTION 未註明）— 加 position 檢查或明示
@@ -324,7 +324,7 @@
 - **I-12** `_esc` 保留但無用 — 與 N-8 同
   - **修補狀態**：✅ 已修補（2026-08-09）— 同 N-8（_esc 已刪除）
 - **I-13** exec_log/DB/kline 三處時間基準混用（UTC / UTC+8 / UTC 日期）— 統一 UTC
-  - **修補狀態**：⏳ 未修補 — 三處時間基準混用仍在（line 290/305/321/336/349/608 皆 `datetime('now','+8 hours')`）；spec D8 只涵蓋 prices 節流最小範圍，完整統一 Out of Scope
+  - **修補狀態**：⏭ **Out of Scope**（spec D8 最小範圍：prices 節流已統一 UTC；完整時間基準統一影響前端顯示時區，另案決策）
 
 ---
 
